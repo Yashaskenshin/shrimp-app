@@ -1,0 +1,214 @@
+// Shrimp export cost-sheet web app data model.
+// Mirrors the Excel "Cost sheet format - Shrimps.xlsx" structure.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ----------------------------------------------------------------------
+// Master catalogue of shrimp SKUs (sheet "master")
+// ----------------------------------------------------------------------
+model Product {
+  id            String   @id @default(cuid())
+  code          String   @unique
+  name          String
+  rmAvgSize     Float? // RM avg size pieces / kg (sheet col F)
+  stdYieldPct   Float? // standard yield e.g. 0.63 (sheet col G)
+  sizeBand      String? // "16/20", "21/25" ... (sheet col H)
+  category      String? // optional: HOSO / PDTO / PDTL / PUD / VA
+  packDefault   String? // default pack size e.g. 5X2LBS
+  notes         String?
+
+  active        Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  lines         QuoteLine[]
+}
+
+// ----------------------------------------------------------------------
+// "Processing charge" sheet — variable Rs/kg by plant / product / freeze / pack
+// ----------------------------------------------------------------------
+model ProcessingChargeRate {
+  id          String @id @default(cuid())
+  plant       String
+  productG    String
+  product     String
+  freezeType  String
+  packSize    String
+  countSize   String
+  rsPerKg     Float
+
+  @@index([plant])
+}
+
+// ----------------------------------------------------------------------
+// All editable cost assumptions / global numbers (sheet rows 37-55)
+// ----------------------------------------------------------------------
+// Key/value bag — easy to add new ones from /assumptions UI without
+// migrating the DB every time.
+//
+// Seeded keys (with defaults from the original Excel):
+//   rm_buffer_per_kg          2       (Rs added on top of RM price/kg before yield)
+//   harvesting_factor_per_kg  9.9     (Harvesting = 1/yield * factor)
+//   packaging_per_kg          8       (Rs/kg)
+//   additive_per_kg           6.5     (Rs/kg)
+//   commission_per_kg         0       (Rs/kg)
+//   export_shipment_per_kg    25      (Rs/kg)
+//   ddp_per_kg                0       (Rs/kg)
+//   dbk_pct                   0.03    (3% of selling price * 0.98)
+//   meis_pct                  0.025   (2.5% of selling price * 0.98)
+//   dbk_meis_basis_pct        0.98    (only on 98% of selling price)
+//   processing_charge_per_kg  70      (fixed cost block, Rs/kg)
+//   wages_per_kg              4.9632
+//   rental_per_kg             0
+//   depreciation_per_kg       0.1141
+model Assumption {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  label       String
+  value       Float
+  unit        String   @default("Rs/kg") // "Rs/kg", "%", "factor"
+  group       String   @default("cost")   // "cost", "duty", "fixed", "factor"
+  notes       String?
+  updatedAt   DateTime @updatedAt
+}
+
+// ----------------------------------------------------------------------
+// A quote / cost-sheet (corresponds to one PO)
+// ----------------------------------------------------------------------
+enum QuoteStatus {
+  DRAFT
+  SUBMITTED
+  VERIFIED
+  APPROVED
+  REJECTED
+  SENT
+}
+
+model Quote {
+  id              String   @id @default(cuid())
+  poNo            String?
+  contractDate    DateTime?
+  revisedDate     DateTime?
+  customer        String?
+  country         String?
+  incoterm        String?  // FOB / CIF / CFR / DDP ...
+  payment         String?
+  plant           String?
+  /** Matches Excel "Freeze type" on Processing charge sheet (Block / IQF / …). Empty = any. */
+  freezeType      String?
+  /** When set, overrides global assumptions.commissionPerKg for this quote (Excel: one cell fans across lines). */
+  commissionOverridePerKg Float?
+  /** Excel "Processing charge" sheet stores both ex-GST (L col) and incl-GST (M = L×1.18). True = use incl-GST. */
+  processingChargeWithGst Boolean @default(false)
+  portLoading     String?
+  portLoadingDate DateTime?
+  portDestination String?
+  portDestDate    DateTime?
+
+  // FX & meta
+  fxRate          Float    @default(83) // INR per USD, manual entry per quote
+  status          QuoteStatus @default(DRAFT)
+
+  preparedBy      String?
+  verifiedBy      String?
+  approvedBy      String?
+
+  notes           String?
+
+  // Extra cost rows (Rs/kg per product line), JSON array:
+  // [{ "id": "uuid", "label": "Inland freight", "byLineNo": { "1": 2.5, "2": 0 } }]
+  customVariableCosts Json?
+  customFixedCosts    Json?
+
+  lines           QuoteLine[]
+  events          QuoteEvent[]
+  snapshot        QuoteSnapshot?
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+// ----------------------------------------------------------------------
+// Individual product line on a quote (rows 10-21 of the Maintain sheet)
+// ----------------------------------------------------------------------
+model QuoteLine {
+  id               String   @id @default(cuid())
+  quoteId          String
+  quote            Quote    @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+
+  lineNo           Int      // 1..12 (matches the Excel slot order)
+
+  // Sell information
+  productCode      String?
+  productId        String?
+  product          Product? @relation(fields: [productId], references: [id])
+  productName      String?  // snapshot (so renaming a Product doesn't change old line)
+  sizeBand         String?  // snapshot
+  pack             String?  // e.g. 5X2LBS
+
+  weightKg         Float    @default(0)
+  usdPerKg         Float    @default(0)
+  stockFgKg        Float    @default(0)
+
+  // Per-line cost inputs (override the global assumptions if non-null)
+  rmPriceRs        Float?   // Rs/kg of raw material (sheet row 32)
+  stockCostRs      Float?   // Sheet col P
+  packagingRs      Float?   // override
+  additiveRs       Float?   // override
+  processingChargeRs Float? // override
+  commissionRs     Float?   // override
+  exportShipmentRs Float?   // override
+  ddpRs            Float?   // override
+
+  // Optional per-line yield / avg size override (defaults to Product master)
+  yieldPctOverride Float?
+  avgSizeOverride  Float?
+
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([quoteId])
+  @@unique([quoteId, lineNo])
+}
+
+// ----------------------------------------------------------------------
+// Audit / approval workflow
+// ----------------------------------------------------------------------
+model QuoteEvent {
+  id        String   @id @default(cuid())
+  quoteId   String
+  quote     Quote    @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+
+  action    String   // "CREATED" | "SUBMITTED" | "VERIFIED" | "APPROVED" | "REJECTED" | "EDITED" | "NOTE"
+  actor     String?  // free-text actor name (until we add auth)
+  comment   String?
+
+  payload   String?  // JSON blob (e.g. field-level diff)
+
+  createdAt DateTime @default(now())
+
+  @@index([quoteId])
+}
+
+// ----------------------------------------------------------------------
+// Frozen snapshot taken when a quote is approved (hybrid live/snapshot mode)
+// ----------------------------------------------------------------------
+model QuoteSnapshot {
+  id        String   @id @default(cuid())
+  quoteId   String   @unique
+  quote     Quote    @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+
+  // Whole-quote JSON: header + lines + assumptions + products + computed
+  // results at the moment of approval. Once frozen, results never drift.
+  payload   String
+
+  takenAt   DateTime @default(now())
+  takenBy   String?
+}

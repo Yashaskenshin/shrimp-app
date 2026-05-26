@@ -1,26 +1,72 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #f8fafc;
+  --foreground: #0f172a;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --font-sans: var(--font-geist);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+}
+
+@layer components {
+  .input {
+    @apply h-9 w-full rounded-md border border-slate-300 bg-white px-2.5 text-sm text-slate-900 placeholder-slate-400 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500;
+  }
+  .input-num {
+    @apply text-right tabular-nums;
+  }
+  .label {
+    @apply mb-1 block text-xs font-medium uppercase tracking-wide text-slate-500;
+  }
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-md px-3.5 py-2 text-sm font-medium transition-colors disabled:opacity-50;
+  }
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-md px-3.5 py-2 text-sm font-medium transition-colors disabled:opacity-50 bg-emerald-600 text-white hover:bg-emerald-700;
+  }
+  .btn-secondary {
+    @apply inline-flex items-center justify-center gap-2 rounded-md px-3.5 py-2 text-sm font-medium transition-colors disabled:opacity-50 bg-slate-100 text-slate-900 hover:bg-slate-200;
+  }
+  .btn-danger {
+    @apply inline-flex items-center justify-center gap-2 rounded-md px-3.5 py-2 text-sm font-medium transition-colors disabled:opacity-50 bg-rose-600 text-white hover:bg-rose-700;
+  }
+  .card {
+    @apply rounded-lg border border-slate-200 bg-white p-5 shadow-sm;
+  }
+}
+
+table.calc-wide th,
+table.calc-wide td {
+  white-space: nowrap;
+  border-bottom: 1px solid #e2e8f0;
+  padding: 0.65rem 0.85rem;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-size: 0.875rem;
+  line-height: 1.45;
+}
+table.calc-wide th:first-child,
+table.calc-wide td:first-child {
+  text-align: left;
+  font-weight: 500;
+  color: #475569;
+  padding-left: 1rem;
+}
+table.calc-wide thead th {
+  background: #f8fafc;
+  font-weight: 600;
+  color: #64748b;
+  border-bottom: 2px solid #e2e8f0;
+}
+table.calc-wide tbody tr:hover {
+  background: #fafafa;
 }
