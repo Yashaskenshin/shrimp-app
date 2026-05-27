@@ -47,7 +47,7 @@ See **[`docs/DEPLOY-VERCEL.md`](docs/DEPLOY-VERCEL.md)** for Vercel + Postgres (
 Short version:
 
 1. Repo root = **`shrimp-app/`** (this folder is what you push to GitHub).
-2. **`vercel.json`** runs `prisma migrate deploy` then `next build`; **`postinstall`** runs `prisma generate`.
+2. **`npm run build`** runs `prisma migrate deploy` then `next build`; **`postinstall`** runs `prisma generate`. **`vercel.json`** only sets the Next.js framework.
 3. Set **`DATABASE_URL`** on Vercel to a **hosted Postgres** URL for production (SQLite is for local dev only).
 4. Switch **`prisma/schema.prisma`** to `provider = "postgresql"` when you move production to Postgres, then add migrations and redeploy.
 
@@ -56,7 +56,7 @@ Short version:
 | Script | Purpose |
 |---|---|
 | `npm run dev` | Next.js dev server |
-| `npm run build` | Production build |
+| `npm run build` | `prisma migrate deploy` then production Next.js build |
 | `npm run calc:test` | Validate calculation kernel against Excel values |
 | `npm run lookup:test` | Processing charge lookup matcher (unit smoke test) |
 | `npm run db:migrate` | Apply schema changes |

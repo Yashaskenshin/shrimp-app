@@ -4,6 +4,9 @@ import { computeQuote, type Assumptions, DEFAULT_ASSUMPTIONS } from "@/lib/calc"
 import { parseCustomCosts } from "@/lib/customCosts";
 import { buildQuoteComputeInput } from "@/lib/quoteCompute";
 
+/** Avoid Prisma at static generation time — dashboard always reads live DB on request. */
+export const dynamic = "force-dynamic";
+
 function fmtCurrency(n: number, digits = 0) {
   return new Intl.NumberFormat("en-IN", {
     style: "currency",
