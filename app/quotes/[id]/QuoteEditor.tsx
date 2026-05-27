@@ -12,10 +12,12 @@ import {
   saveQuote,
   transitionQuote,
   deleteQuote,
+  duplicateQuote,
   type QuoteAction,
   type SaveLine,
   type SaveQuotePayload,
 } from "@/app/actions/quotes";
+import { getProductPriceHistory } from "@/app/actions/products";
 import {
   amountForLine,
   parseCustomCosts,
@@ -96,6 +98,19 @@ interface EventRow {
   comment: string | null;
   createdAt: string;
 }
+
+type PriceHistoryEntry = {
+  usdPerKg: number;
+  weightKg: number;
+  rmPriceRs: number | null;
+  quote: {
+    poNo: string | null;
+    customer: string | null;
+    contractDate: string | null;
+    fxRate: number;
+    status: string;
+  };
+};
 
 /** Editable custom cost row — `values` parallel to `rows` array order. */
 interface CustomCostUI {
@@ -220,6 +235,9 @@ export function QuoteEditor(props: Props) {
   const [whatIfRm, setWhatIfRm] = useState(1);
   const [whatIfFx, setWhatIfFx] = useState(1);
 
+  const [priceHistoryCache, setPriceHistoryCache] = useState<Record<string, PriceHistoryEntry[]>>({});
+  const [actionError, setActionError] = useState<string | null>(null);
+
   const [saving, startSave] = useTransition();
   const [statusBusy, startStatus] = useTransition();
 
@@ -289,6 +307,31 @@ export function QuoteEditor(props: Props) {
   const resultByLine: Record<number, LineResult | undefined> = {};
   for (const lr of result.lines) resultByLine[lr.lineNo] = lr;
 
+  const lineWarnings = useMemo(() => {
+    const out: Record<number, string[]> = {};
+    for (const r of rows) {
+      const isActive = r.weightKg > 0 || r.usdPerKg > 0;
+      if (!isActive) continue;
+      const warns: string[] = [];
+      if ((r.yieldPctOverride ?? 0.63) <= 0) warns.push("Yield is 0 — RM cost omitted");
+      if ((r.rmPriceRs ?? 0) <= 0) warns.push("RM price is 0");
+      const calcLine = calcInput.lines.find((l) => l.lineNo === r.lineNo);
+      if (
+        calcLine &&
+        r.processingChargeRs == null &&
+        calcLine.processingChargeVarLookup === undefined &&
+        r.productCode &&
+        header.plant
+      ) {
+        warns.push("Processing rate: no match for this plant/product/pack");
+      }
+      if (warns.length) out[r.lineNo] = warns;
+    }
+    return out;
+  }, [rows, calcInput.lines, header.plant]);
+
+  const totalWarnings = Object.values(lineWarnings).reduce((s, w) => s + w.length, 0);
+
   // Product picker is grouped by short category prefix (VA PDTO, VA PDTL, VA HL EZ, …).
   const productGroups = useMemo(
     () => groupProductsByCategory(props.products),
@@ -305,20 +348,12 @@ export function QuoteEditor(props: Props) {
       if (!code) {
         return prev.map((r, idx) =>
           idx === i
-            ? {
-                ...r,
-                productCode: null,
-                productName: null,
-                sizeBand: null,
-                pack: null,
-              }
+            ? { ...r, productCode: null, productName: null, sizeBand: null, pack: null }
             : r,
         );
       }
       const p = props.products.find((x) => x.code === code);
-      if (!p) {
-        return prev.map((r, idx) => (idx === i ? { ...r, productCode: code } : r));
-      }
+      if (!p) return prev.map((r, idx) => (idx === i ? { ...r, productCode: code } : r));
       const derivedPack = p.packDefault || parsePackFromName(p.name);
       return prev.map((r, idx) =>
         idx === i
@@ -328,12 +363,21 @@ export function QuoteEditor(props: Props) {
               productName: p.name,
               sizeBand: p.sizeBand,
               pack: r.pack || derivedPack || null,
-              yieldPctOverride: row.yieldPctOverride ?? p.stdYieldPct ?? 0.63,
-              avgSizeOverride: row.avgSizeOverride ?? p.rmAvgSize ?? 0,
+              yieldPctOverride: p.stdYieldPct ?? 0.63,
+              avgSizeOverride: p.rmAvgSize ?? 0,
             }
           : r,
       );
     });
+    // Fetch price history for new product (cached after first load)
+    if (code && !priceHistoryCache[code]) {
+      getProductPriceHistory(code).then((history) => {
+        setPriceHistoryCache((prev) => ({
+          ...prev,
+          [code]: history as unknown as PriceHistoryEntry[],
+        }));
+      });
+    }
   }
 
   function addSellLine() {
@@ -449,7 +493,12 @@ export function QuoteEditor(props: Props) {
 
   function handleAction(action: QuoteAction) {
     startStatus(async () => {
-      await transitionQuote(header.id, action);
+      const res = await transitionQuote(header.id, action);
+      if (!res.ok) {
+        setActionError(res.error);
+        return;
+      }
+      setActionError(null);
       router.refresh();
     });
   }
@@ -464,6 +513,11 @@ export function QuoteEditor(props: Props) {
             <span className="ml-3 rounded bg-slate-100 px-2 py-1 text-xs font-medium text-slate-700">
               {header.status}
             </span>
+            {totalWarnings > 0 && (
+              <span className="ml-2 rounded bg-amber-100 px-2 py-1 text-xs font-medium text-amber-800">
+                ⚠ {totalWarnings} warning{totalWarnings > 1 ? "s" : ""}
+              </span>
+            )}
           </h1>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -498,20 +552,23 @@ export function QuoteEditor(props: Props) {
           <Link href={`/quotes/${header.id}/pdf`} target="_blank" className="btn-secondary">
             PDF / Print
           </Link>
+          <form action={async () => { await duplicateQuote(header.id); }}>
+            <button type="submit" className="btn-secondary">Duplicate</button>
+          </form>
           <form
-            action={async () => {
-              await deleteQuote(header.id);
-            }}
-            onSubmit={(e) => {
-              if (!confirm("Delete this quote?")) e.preventDefault();
-            }}
+            action={async () => { await deleteQuote(header.id); }}
+            onSubmit={(e) => { if (!confirm("Delete this quote?")) e.preventDefault(); }}
           >
-            <button type="submit" className="btn-danger">
-              Delete
-            </button>
+            <button type="submit" className="btn-danger">Delete</button>
           </form>
         </div>
       </div>
+
+      {actionError && (
+        <div className="rounded-md border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
+          <strong>Cannot proceed:</strong> {actionError}
+        </div>
+      )}
 
       <div className="card grid grid-cols-1 gap-4 md:grid-cols-3 lg:grid-cols-4">
         <Field label="PO No">
@@ -712,26 +769,28 @@ export function QuoteEditor(props: Props) {
             <tbody>
               {rows.map((r, i) => {
                 const yPct = (r.yieldPctOverride ?? 0.63) * 100;
+                const warns = lineWarnings[r.lineNo];
+                const history = r.productCode ? priceHistoryCache[r.productCode] : undefined;
+                const lastQuote = history?.[0];
                 return (
                   <tr key={`${r.lineNo}-${i}`}>
-                    <td className="text-left text-slate-400">{r.lineNo}</td>
+                    <td className="text-left text-slate-400">
+                      {r.lineNo}
+                      {warns && (
+                        <span
+                          title={warns.join("\n")}
+                          className="ml-1 cursor-help text-amber-500"
+                        >
+                          ⚠
+                        </span>
+                      )}
+                    </td>
                     <td className="text-left">
-                      <select
-                        className="input"
-                        value={r.productCode ?? ""}
-                        onChange={(e) => pickProduct(i, e.target.value)}
-                      >
-                        <option value="">Select code…</option>
-                        {productGroups.map((g) => (
-                          <optgroup key={g.category} label={g.category}>
-                            {g.items.map((p) => (
-                              <option key={p.code} value={p.code}>
-                                {p.code} — {p.name}
-                              </option>
-                            ))}
-                          </optgroup>
-                        ))}
-                      </select>
+                      <ProductCombobox
+                        products={props.products}
+                        value={r.productCode}
+                        onChange={(code) => pickProduct(i, code)}
+                      />
                     </td>
                     <td className="text-left text-slate-700">{r.productName || ""}</td>
                     <td className="text-left text-slate-700">{r.pack || ""}</td>
@@ -739,7 +798,15 @@ export function QuoteEditor(props: Props) {
                       <NumInput value={r.weightKg} onChange={(v) => updateRow(i, { weightKg: v })} />
                     </td>
                     <td>
-                      <NumInput step={0.01} value={r.usdPerKg} onChange={(v) => updateRow(i, { usdPerKg: v })} />
+                      <div>
+                        <NumInput step={0.01} value={r.usdPerKg} onChange={(v) => updateRow(i, { usdPerKg: v })} />
+                        {lastQuote && (
+                          <div className="mt-0.5 text-[11px] text-slate-400 tabular-nums">
+                            Last: ${lastQuote.usdPerKg.toFixed(2)}
+                            {lastQuote.quote.customer ? ` · ${lastQuote.quote.customer}` : ""}
+                          </div>
+                        )}
+                      </div>
                     </td>
                     <td>
                       <NumInput
@@ -748,13 +815,17 @@ export function QuoteEditor(props: Props) {
                       />
                     </td>
                     <td>
-                      <NumInput value={r.rmPriceRs ?? 0} onChange={(v) => updateRow(i, { rmPriceRs: v })} />
+                      <NumInput
+                        value={r.rmPriceRs ?? 0}
+                        onChange={(v) => updateRow(i, { rmPriceRs: v })}
+                        className={warns?.some((w) => w.includes("RM price")) ? "!border-amber-400" : ""}
+                      />
                     </td>
                     <td>
                       <div className="flex items-center justify-end gap-0.5">
                         <NumInput
                           step={0.1}
-                          className="!min-w-[4.25rem]"
+                          className={`!min-w-[4.25rem]${warns?.some((w) => w.includes("Yield")) ? " !border-amber-400" : ""}`}
                           value={Math.round(yPct * 1000) / 1000}
                           onChange={(v) => updateRow(i, { yieldPctOverride: v / 100 })}
                         />
@@ -987,6 +1058,109 @@ function SummaryCard({
         {value}
         {suffix}
       </div>
+    </div>
+  );
+}
+
+function ProductCombobox({
+  products,
+  value,
+  onChange,
+}: {
+  products: ProductOpt[];
+  value: string | null;
+  onChange: (code: string) => void;
+}) {
+  const [query, setQuery] = useState("");
+  const [open, setOpen] = useState(false);
+  const wrapperRef = useRef<HTMLDivElement>(null);
+
+  const filtered = useMemo(() => {
+    if (!query.trim()) return products.slice(0, 40);
+    const q = query.toLowerCase();
+    return products
+      .filter((p) => p.code.toLowerCase().includes(q) || p.name.toLowerCase().includes(q))
+      .slice(0, 40);
+  }, [products, query]);
+
+  useEffect(() => {
+    if (!open) return;
+    function handler(e: MouseEvent) {
+      if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) {
+        setOpen(false);
+        setQuery("");
+      }
+    }
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  const selected = products.find((p) => p.code === value);
+
+  return (
+    <div ref={wrapperRef} className="relative">
+      {open ? (
+        <input
+          autoFocus
+          className="input"
+          placeholder="Type code or name…"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") { setOpen(false); setQuery(""); }
+            if (e.key === "Enter" && filtered.length > 0) {
+              onChange(filtered[0].code);
+              setOpen(false);
+              setQuery("");
+            }
+          }}
+        />
+      ) : (
+        <button
+          type="button"
+          className="input w-full truncate text-left"
+          onClick={() => setOpen(true)}
+        >
+          {selected ? (
+            <>
+              <span className="font-mono text-xs text-slate-500">{selected.code}</span>{" "}
+              {selected.name}
+            </>
+          ) : (
+            <span className="text-slate-400">Select code…</span>
+          )}
+        </button>
+      )}
+      {open && (
+        <ul className="absolute left-0 z-20 mt-1 max-h-56 w-80 overflow-auto rounded-md border border-slate-200 bg-white text-sm shadow-lg">
+          {value && (
+            <li>
+              <button
+                type="button"
+                className="w-full px-3 py-1.5 text-left text-xs text-slate-400 hover:bg-slate-50"
+                onMouseDown={() => { onChange(""); setOpen(false); setQuery(""); }}
+              >
+                — clear —
+              </button>
+            </li>
+          )}
+          {filtered.length === 0 && (
+            <li className="px-3 py-2 text-slate-400">No matches</li>
+          )}
+          {filtered.map((p) => (
+            <li key={p.code}>
+              <button
+                type="button"
+                className="w-full px-3 py-2 text-left hover:bg-emerald-50"
+                onMouseDown={() => { onChange(p.code); setOpen(false); setQuery(""); }}
+              >
+                <span className="mr-1 font-mono text-xs text-slate-400">{p.code}</span>
+                {p.name}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }

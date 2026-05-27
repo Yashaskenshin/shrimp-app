@@ -47,3 +47,28 @@ export async function activateProduct(id: string, active: boolean) {
   await prisma.product.update({ where: { id }, data: { active } });
   revalidatePath("/products");
 }
+
+export async function getProductPriceHistory(productCode: string) {
+  return prisma.quoteLine.findMany({
+    where: {
+      productCode,
+      quote: { status: { not: "REJECTED" } },
+    },
+    select: {
+      usdPerKg: true,
+      weightKg: true,
+      rmPriceRs: true,
+      quote: {
+        select: {
+          poNo: true,
+          customer: true,
+          contractDate: true,
+          fxRate: true,
+          status: true,
+        },
+      },
+    },
+    orderBy: { quote: { createdAt: "desc" } },
+    take: 5,
+  });
+}
