@@ -167,11 +167,92 @@ export async function deleteQuote(id: string) {
 
 export type QuoteAction = "SUBMIT" | "VERIFY" | "APPROVE" | "REJECT" | "REVERT_DRAFT";
 
-export async function transitionQuote(id: string, action: QuoteAction, comment?: string) {
+export async function duplicateQuote(id: string) {
   const q = await prisma.quote.findUniqueOrThrow({
     where: { id },
     include: { lines: true },
   });
+
+  const newQuote = await prisma.quote.create({
+    data: {
+      poNo: q.poNo ? `${q.poNo}-COPY` : null,
+      customer: q.customer,
+      country: q.country,
+      fxRate: q.fxRate,
+      plant: q.plant,
+      freezeType: q.freezeType,
+      incoterm: q.incoterm,
+      payment: q.payment,
+      portLoading: q.portLoading,
+      portDestination: q.portDestination,
+      commissionOverridePerKg: q.commissionOverridePerKg,
+      processingChargeWithGst: q.processingChargeWithGst,
+      notes: q.notes,
+      customVariableCosts: (q.customVariableCosts ?? Prisma.JsonNull) as Prisma.InputJsonValue,
+      customFixedCosts: (q.customFixedCosts ?? Prisma.JsonNull) as Prisma.InputJsonValue,
+      lines: {
+        create: q.lines.map((l) => ({
+          lineNo: l.lineNo,
+          productCode: l.productCode,
+          productName: l.productName,
+          sizeBand: l.sizeBand,
+          pack: l.pack,
+          weightKg: l.weightKg,
+          usdPerKg: l.usdPerKg,
+          stockFgKg: l.stockFgKg,
+          rmPriceRs: l.rmPriceRs,
+          yieldPctOverride: l.yieldPctOverride,
+          avgSizeOverride: l.avgSizeOverride,
+          packagingRs: l.packagingRs,
+          additiveRs: l.additiveRs,
+          processingChargeRs: l.processingChargeRs,
+          commissionRs: l.commissionRs,
+          exportShipmentRs: l.exportShipmentRs,
+          ddpRs: l.ddpRs,
+        })),
+      },
+    },
+  });
+
+  await prisma.quoteEvent.create({
+    data: {
+      quoteId: newQuote.id,
+      action: "CREATED",
+      comment: `Duplicated from ${q.poNo ?? id}`,
+    },
+  });
+
+  revalidatePath("/quotes");
+  revalidatePath("/");
+  redirect(`/quotes/${newQuote.id}`);
+}
+
+export async function transitionQuote(
+  id: string,
+  action: QuoteAction,
+  comment?: string,
+): Promise<{ ok: true; status: string } | { ok: false; error: string }> {
+  const q = await prisma.quote.findUniqueOrThrow({
+    where: { id },
+    include: { lines: true },
+  });
+
+  // Validate active lines before SUBMIT or APPROVE
+  if (action === "SUBMIT" || action === "APPROVE") {
+    const activeLines = q.lines.filter((l) => l.weightKg > 0);
+    const issues: string[] = [];
+    for (const l of activeLines) {
+      if ((l.yieldPctOverride ?? 0.63) <= 0) {
+        issues.push(`Line ${l.lineNo}: yield is 0`);
+      }
+      if ((l.rmPriceRs ?? 0) <= 0) {
+        issues.push(`Line ${l.lineNo}: RM price is 0`);
+      }
+    }
+    if (issues.length) {
+      return { ok: false, error: issues.join(" · ") };
+    }
+  }
 
   let nextStatus = q.status;
   let event = action;
@@ -236,5 +317,5 @@ export async function transitionQuote(id: string, action: QuoteAction, comment?:
   revalidatePath(`/quotes/${id}`);
   revalidatePath("/quotes");
   revalidatePath("/");
-  return { ok: true, status: nextStatus };
+  return { ok: true as const, status: nextStatus };
 }

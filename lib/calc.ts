@@ -326,6 +326,9 @@ export function computeQuote(q: QuoteInput): QuoteResult {
       totalKg,
     );
 
+  const totalContrib000 = lines.reduce((s, l) => s + l.contributionProfit000, 0);
+  const totalProfit000 = lines.reduce((s, l) => s + l.profitBeforeAdmin000, 0);
+
   return {
     lines,
     totals: {
@@ -340,14 +343,14 @@ export function computeQuote(q: QuoteInput): QuoteResult {
 
       variableCostRs: weighted("variableCostRs"),
       contributionMarginRs: weighted("contributionMarginRs"),
-      contributionProfit000: lines.reduce((s, l) => s + l.contributionProfit000, 0),
-      contributionMarginPct: weighted("contributionMarginPct"),
+      contributionProfit000: totalContrib000,
+      contributionMarginPct: safeDiv(totalContrib000, totalInr000),
 
       fixedCostRs: weighted("fixedCostRs"),
       totalCostRs: weighted("totalCostRs"),
       profitBeforeAdminRs: weighted("profitBeforeAdminRs"),
-      profitBeforeAdmin000: lines.reduce((s, l) => s + l.profitBeforeAdmin000, 0),
-      profitPct: weighted("profitPct"),
+      profitBeforeAdmin000: totalProfit000,
+      profitPct: safeDiv(totalProfit000, totalInr000),
     },
   };
 }
