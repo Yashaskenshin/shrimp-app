@@ -252,6 +252,21 @@ export function QuoteEditor(props: Props) {
     setCustomFixUI((cf) => resizeCustomValues(cf, rows.length));
   }, [rows.length]);
 
+  // Unsaved-changes tracking
+  const [changed, setChanged] = useState(false);
+  const isFirstRender = useRef(true);
+  useEffect(() => {
+    if (isFirstRender.current) { isFirstRender.current = false; return; }
+    setChanged(true);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rows, header, customVarUI, customFixUI]);
+  useEffect(() => {
+    if (!changed) return;
+    function handler(e: BeforeUnloadEvent) { e.preventDefault(); e.returnValue = ""; }
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [changed]);
+
   const calcInput = useMemo(() => {
     const customVariableCosts = persistCustom(customVarUI, rows);
     const customFixedCosts = persistCustom(customFixUI, rows);
@@ -436,6 +451,12 @@ export function QuoteEditor(props: Props) {
   }
 
   function handleSave() {
+    if (
+      header.status === "APPROVED" &&
+      !confirm(
+        "This quote is APPROVED. Saving modifies the live data but the approval snapshot stays unchanged. Continue?",
+      )
+    ) return;
     startSave(async () => {
       try {
       const cv = persistCustom(customVarUI, rows);
@@ -491,6 +512,7 @@ export function QuoteEditor(props: Props) {
         })),
       };
       await saveQuote(payload);
+      setChanged(false);
       toast.success("Saved");
       router.refresh();
       } catch {
@@ -542,7 +564,7 @@ export function QuoteEditor(props: Props) {
         </div>
         <div className="flex flex-wrap gap-2">
           <button onClick={handleSave} disabled={saving} className="btn-primary">
-            {saving ? "Saving…" : "Save"}
+            {saving ? "Saving…" : changed ? "Save ●" : "Save"}
           </button>
           {header.status === "DRAFT" && (
             <button onClick={() => handleAction("SUBMIT")} disabled={statusBusy} className="btn-secondary">
@@ -559,12 +581,17 @@ export function QuoteEditor(props: Props) {
               Approve & Snapshot
             </button>
           )}
-          {header.status !== "DRAFT" && header.status !== "APPROVED" && (
+          {header.status === "APPROVED" && (
+            <button onClick={() => handleAction("SEND")} disabled={statusBusy} className="btn-primary">
+              Mark as Sent
+            </button>
+          )}
+          {header.status !== "DRAFT" && header.status !== "APPROVED" && header.status !== "SENT" && (
             <button onClick={() => handleAction("REVERT_DRAFT")} disabled={statusBusy} className="btn-secondary">
               Revert to Draft
             </button>
           )}
-          {header.status !== "REJECTED" && (
+          {header.status !== "REJECTED" && header.status !== "SENT" && (
             <button onClick={() => handleAction("REJECT")} disabled={statusBusy} className="btn-danger">
               Reject
             </button>
@@ -597,6 +624,12 @@ export function QuoteEditor(props: Props) {
       {actionError && (
         <div className="rounded-md border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
           <strong>Cannot proceed:</strong> {actionError}
+        </div>
+      )}
+
+      {header.status === "APPROVED" && (
+        <div className="rounded-md border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+          <strong>Approved quote:</strong> A calculation snapshot was taken when this was approved. Any edits you save here will not affect the snapshot used for reporting.
         </div>
       )}
 

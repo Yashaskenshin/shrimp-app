@@ -165,7 +165,16 @@ export async function deleteQuote(id: string) {
   redirect("/quotes");
 }
 
-export type QuoteAction = "SUBMIT" | "VERIFY" | "APPROVE" | "REJECT" | "REVERT_DRAFT";
+export type QuoteAction = "SUBMIT" | "VERIFY" | "APPROVE" | "REJECT" | "REVERT_DRAFT" | "SEND";
+
+const VALID_TRANSITIONS: Record<string, QuoteAction[]> = {
+  DRAFT:     ["SUBMIT", "REJECT"],
+  SUBMITTED: ["VERIFY", "APPROVE", "REJECT", "REVERT_DRAFT"],
+  VERIFIED:  ["APPROVE", "REJECT", "REVERT_DRAFT"],
+  APPROVED:  ["SEND"],
+  REJECTED:  ["REVERT_DRAFT"],
+  SENT:      [],
+};
 
 export async function duplicateQuote(id: string) {
   const q = await prisma.quote.findUniqueOrThrow({
@@ -237,6 +246,12 @@ export async function transitionQuote(
     include: { lines: true },
   });
 
+  // Guard invalid transitions
+  const allowed = VALID_TRANSITIONS[q.status] ?? [];
+  if (!allowed.includes(action)) {
+    return { ok: false, error: `Cannot ${action} a quote with status ${q.status}` };
+  }
+
   // Validate active lines before SUBMIT or APPROVE
   if (action === "SUBMIT" || action === "APPROVE") {
     const activeLines = q.lines.filter((l) => l.weightKg > 0);
@@ -261,6 +276,7 @@ export async function transitionQuote(
   if (action === "APPROVE") nextStatus = "APPROVED";
   if (action === "REJECT") nextStatus = "REJECTED";
   if (action === "REVERT_DRAFT") nextStatus = "DRAFT";
+  if (action === "SEND") nextStatus = "SENT";
 
   await prisma.quote.update({
     where: { id },
