@@ -450,6 +450,71 @@ export function QuoteEditor(props: Props) {
     );
   }
 
+  function buildPayload(): SaveQuotePayload {
+    const cv = persistCustom(customVarUI, rows);
+    const cf = persistCustom(customFixUI, rows);
+    return {
+      id: header.id,
+      poNo: header.poNo,
+      contractDate: header.contractDate,
+      revisedDate: header.revisedDate,
+      customer: header.customer,
+      country: header.country,
+      incoterm: header.incoterm,
+      payment: header.payment,
+      plant: header.plant,
+      freezeType: header.freezeType,
+      commissionOverridePerKg: header.commissionOverridePerKg,
+      processingChargeWithGst: header.processingChargeWithGst,
+      portLoading: header.portLoading,
+      portLoadingDate: header.portLoadingDate,
+      portDestination: header.portDestination,
+      portDestDate: header.portDestDate,
+      fxRate: header.fxRate,
+      notes: header.notes,
+      preparedBy: header.preparedBy,
+      verifiedBy: header.verifiedBy,
+      approvedBy: header.approvedBy,
+      customVariableCosts: cv,
+      customFixedCosts: cf,
+      lines: rows.map<SaveLine>((r) => ({
+        lineNo: r.lineNo,
+        productCode: r.productCode,
+        productName: r.productName,
+        sizeBand: r.sizeBand,
+        pack: r.pack,
+        weightKg: r.weightKg,
+        usdPerKg: r.usdPerKg,
+        stockFgKg: r.weightKg,
+        stockCostRs: null,
+        rmPriceRs: r.rmPriceRs,
+        yieldPctOverride: r.yieldPctOverride,
+        avgSizeOverride: r.avgSizeOverride,
+        packagingRs: r.packagingRs,
+        additiveRs: r.additiveRs,
+        processingChargeRs: r.processingChargeRs,
+        commissionRs: r.commissionRs,
+        exportShipmentRs: r.exportShipmentRs,
+        ddpRs: r.ddpRs,
+      })),
+    };
+  }
+
+  async function performSave(opts: { silent?: boolean } = {}): Promise<boolean> {
+    try {
+      await saveQuote(buildPayload());
+      setChanged(false);
+      if (!opts.silent) {
+        toast.success("Saved");
+        router.refresh();
+      }
+      return true;
+    } catch {
+      toast.error("Save failed — please try again");
+      return false;
+    }
+  }
+
   function handleSave() {
     if (
       header.status === "APPROVED" &&
@@ -457,72 +522,15 @@ export function QuoteEditor(props: Props) {
         "This quote is APPROVED. Saving modifies the live data but the approval snapshot stays unchanged. Continue?",
       )
     ) return;
-    startSave(async () => {
-      try {
-      const cv = persistCustom(customVarUI, rows);
-      const cf = persistCustom(customFixUI, rows);
-      const payload: SaveQuotePayload = {
-        id: header.id,
-        poNo: header.poNo,
-        contractDate: header.contractDate,
-        revisedDate: header.revisedDate,
-        customer: header.customer,
-        country: header.country,
-        incoterm: header.incoterm,
-        payment: header.payment,
-        plant: header.plant,
-        freezeType: header.freezeType,
-        commissionOverridePerKg: header.commissionOverridePerKg,
-        processingChargeWithGst: header.processingChargeWithGst,
-        portLoading: header.portLoading,
-        portLoadingDate: header.portLoadingDate,
-        portDestination: header.portDestination,
-        portDestDate: header.portDestDate,
-        fxRate: header.fxRate,
-        notes: header.notes,
-        preparedBy: header.preparedBy,
-        verifiedBy: header.verifiedBy,
-        approvedBy: header.approvedBy,
-        customVariableCosts: cv,
-        customFixedCosts: cf,
-        lines: rows.map<SaveLine>((r) => ({
-          lineNo: r.lineNo,
-          productCode: r.productCode,
-          productName: r.productName,
-          sizeBand: r.sizeBand,
-          pack: r.pack,
-          weightKg: r.weightKg,
-          usdPerKg: r.usdPerKg,
-          // Excel keeps a separate "Stock FG" cell but it always equals the
-          // line weight in this workflow, so we mirror it on save and never
-          // expose it as its own input.
-          stockFgKg: r.weightKg,
-          // "Stock cost Rs/kg" was a free cell in the legacy sheet that wasn't
-          // wired into the cost build-up — keep it null so old rows clear.
-          stockCostRs: null,
-          rmPriceRs: r.rmPriceRs,
-          yieldPctOverride: r.yieldPctOverride,
-          avgSizeOverride: r.avgSizeOverride,
-          packagingRs: r.packagingRs,
-          additiveRs: r.additiveRs,
-          processingChargeRs: r.processingChargeRs,
-          commissionRs: r.commissionRs,
-          exportShipmentRs: r.exportShipmentRs,
-          ddpRs: r.ddpRs,
-        })),
-      };
-      await saveQuote(payload);
-      setChanged(false);
-      toast.success("Saved");
-      router.refresh();
-      } catch {
-        toast.error("Save failed — please try again");
-      }
-    });
+    startSave(async () => { await performSave(); });
   }
 
   function handleAction(action: QuoteAction) {
     startStatus(async () => {
+      if (changed) {
+        const ok = await performSave({ silent: true });
+        if (!ok) return;
+      }
       const res = await transitionQuote(header.id, action);
       if (!res.ok) {
         setActionError(res.error);

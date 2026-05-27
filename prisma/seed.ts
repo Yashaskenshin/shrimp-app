@@ -8,7 +8,16 @@ import { PrismaClient } from "@prisma/client";
 import path from "node:path";
 import fs from "node:fs";
 import * as XLSX from "xlsx";
-import type { ProcessingChargeRow } from "../lib/processingLookup";
+/** Full DB row for the Processing charge sheet — distinct from the runtime lookup type. */
+interface ProcessingChargeDbRow {
+  plant: string;
+  productG: string;
+  product: string;
+  freezeType: string;
+  packSize: string;
+  countSize: string;
+  rsPerKg: number;
+}
 
 const prisma = new PrismaClient();
 
@@ -84,7 +93,7 @@ function importMaster(file: string): MasterRow[] {
 }
 
 /** Rows from sheet "Processing charge" (cols Plant … Rs/kg). */
-function importProcessingChargeRates(file: string): ProcessingChargeRow[] {
+function importProcessingChargeRates(file: string): ProcessingChargeDbRow[] {
   const wb = XLSX.readFile(file);
   const sheet = wb.Sheets["Processing charge"];
   if (!sheet) {
@@ -96,7 +105,7 @@ function importProcessingChargeRates(file: string): ProcessingChargeRow[] {
     raw: true,
     defval: null,
   });
-  const out: ProcessingChargeRow[] = [];
+  const out: ProcessingChargeDbRow[] = [];
   for (let i = 3; i < rows.length; i++) {
     const r = rows[i];
     if (!Array.isArray(r)) continue;

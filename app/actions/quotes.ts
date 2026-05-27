@@ -295,11 +295,9 @@ export async function transitionQuote(
     ]);
     const processingTable = pcRates.map((r) => ({
       plant: r.plant,
-      productG: r.productG,
       product: r.product,
       freezeType: r.freezeType,
       packSize: r.packSize,
-      countSize: r.countSize,
       rsPerKg: r.rsPerKg,
     }));
     const customVariableCosts = parseCustomCosts(q.customVariableCosts);

@@ -15,11 +15,9 @@ import type { LineInput } from "./calc";
 
 export type ProcessingChargeRow = {
   plant: string;
-  productG: string;
   product: string;
   freezeType: string;
   packSize: string;
-  countSize: string;
   rsPerKg: number;
 };
 
