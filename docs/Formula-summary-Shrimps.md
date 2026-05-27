@@ -41,7 +41,7 @@ So the **live cost block** on **Maintain** depends on **master** for product att
 
 3. **Weighted averages — `SUMPRODUCT` / `SUM`**  
    Pattern like `=SUMPRODUCT(E27:P27,E37:P37)/Q27` (weights × row / total kg).  
-   **Web app:** `computeQuote` totals use the same **kg-weighted** logic in TypeScript.
+   **Web app:** `computeQuote` totals use the same **kg-weighted** logic for per-kg averages (e.g. avg INR/kg). However, **margin %** uses `Σ contribution / Σ revenue` (not a kg-weighted average of per-line percentages) to match the correct financial definition.
 
 4. **Processing charge sheet**  
    Formulas are tagged **Arithmetic** — every row has the same two-column pattern:  
@@ -50,7 +50,7 @@ So the **live cost block** on **Maintain** depends on **master** for product att
    - **M** = `=L × 1.18` (incl. 18% GST, e.g. `53.10`)  
    Columns **I / J** (`1st step: HO→HL`, `2nd step: HL→Peel`) are placeholders — all 30 rows in this workbook leave them blank.  
    **Web app:** rates are **imported on seed** into `ProcessingChargeRate.rsPerKg` (the L value).
-   The quote editor resolves **variable** processing Rs/kg from **plant + freeze (optional) + pack + product name/code** (`lib/processingLookup.ts`).
+   The quote editor resolves **variable** processing Rs/kg from **plant + freeze (optional) + pack + product name/code** (`lib/processingLookup.ts`). The DB schema also stores `productG` and `countSize` from the sheet but the lookup does not use them — only `plant`, `freezeType`, `packSize`, and `product` are matched.
    A quote-level toggle **`Quote.processingChargeWithGst`** ("Include 18% GST") multiplies the lookup result by 1.18 to match Excel's **M** column.
    **Fixed** processing still comes from global assumptions only.
 
@@ -79,4 +79,8 @@ py -3 inspect_xlsx.py   # currently points at Cost sheet; adjust WB_PATH or dupl
 
 ---
 
-*Last reviewed against `Formula_Summary_Shrimps.xlsx` in the repo root (May 2026).*
+**Note on Stock cost:** Excel row 36 ("Stock cost Rs/kg") is stored in the DB (`QuoteLine.stockCostRs`) for legacy compatibility but is not exposed as an editable field in the UI and is excluded from all cost totals — matching Excel's own `SUM(E37:E46)` which skips row 36.
+
+---
+
+*Last reviewed May 2026.*
