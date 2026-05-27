@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { updateAssumptions } from "@/app/actions/assumptions";
+import { useToast } from "@/app/components/Toaster";
 
 interface Row {
   id: string;
@@ -23,20 +24,20 @@ const GROUP_LABELS: Record<string, string> = {
 
 export function AssumptionsForm({ rows }: { rows: Row[] }) {
   const router = useRouter();
+  const toast = useToast();
   const [state, setState] = useState<Record<string, number>>(() => {
     const init: Record<string, number> = {};
     for (const r of rows) init[r.key] = r.value;
     return init;
   });
   const [busy, start] = useTransition();
-  const [savedAt, setSavedAt] = useState<string | null>(null);
 
   const groups = Array.from(new Set(rows.map((r) => r.group)));
 
   function handleSave() {
     start(async () => {
       await updateAssumptions(state);
-      setSavedAt(new Date().toLocaleTimeString());
+      toast.success("Assumptions saved");
       router.refresh();
     });
   }
@@ -64,7 +65,6 @@ export function AssumptionsForm({ rows }: { rows: Row[] }) {
       ))}
 
       <div className="flex items-center justify-end gap-3">
-        {savedAt && <span className="text-sm text-emerald-700">Saved at {savedAt}</span>}
         <button className="btn-primary" disabled={busy} onClick={handleSave}>
           {busy ? "Saving…" : "Save assumptions"}
         </button>

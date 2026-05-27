@@ -31,19 +31,63 @@ body {
     @apply inline-flex items-center justify-center gap-2 rounded-md px-3.5 py-2 text-sm font-medium transition-colors disabled:opacity-50;
   }
   .btn-primary {
-    @apply inline-flex items-center justify-center gap-2 rounded-md px-3.5 py-2 text-sm font-medium transition-colors disabled:opacity-50 bg-emerald-600 text-white hover:bg-emerald-700;
+    @apply inline-flex items-center justify-center gap-2 rounded-md px-3.5 py-2 text-sm font-medium transition-colors disabled:opacity-50 bg-emerald-600 text-white hover:bg-emerald-700 active:bg-emerald-800;
   }
   .btn-secondary {
-    @apply inline-flex items-center justify-center gap-2 rounded-md px-3.5 py-2 text-sm font-medium transition-colors disabled:opacity-50 bg-slate-100 text-slate-900 hover:bg-slate-200;
+    @apply inline-flex items-center justify-center gap-2 rounded-md px-3.5 py-2 text-sm font-medium transition-colors disabled:opacity-50 bg-slate-100 text-slate-900 hover:bg-slate-200 active:bg-slate-300;
   }
   .btn-danger {
-    @apply inline-flex items-center justify-center gap-2 rounded-md px-3.5 py-2 text-sm font-medium transition-colors disabled:opacity-50 bg-rose-600 text-white hover:bg-rose-700;
+    @apply inline-flex items-center justify-center gap-2 rounded-md px-3.5 py-2 text-sm font-medium transition-colors disabled:opacity-50 bg-rose-600 text-white hover:bg-rose-700 active:bg-rose-800;
   }
   .card {
     @apply rounded-lg border border-slate-200 bg-white p-5 shadow-sm;
   }
 }
 
+/* Toast slide-in */
+@keyframes toast-in {
+  from {
+    transform: translateX(calc(100% + 1.25rem));
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+.toast {
+  animation: toast-in 0.18s ease-out;
+}
+
+/* table.calc — compact data table (wrapping allowed) */
+table.calc th,
+table.calc td {
+  border-bottom: 1px solid #e2e8f0;
+  padding: 0.55rem 0.75rem;
+  font-size: 0.875rem;
+  line-height: 1.45;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+table.calc thead th {
+  background: #f8fafc;
+  font-weight: 600;
+  color: #64748b;
+  border-bottom: 2px solid #e2e8f0;
+  text-align: left;
+}
+table.calc tbody tr:hover {
+  background: #f8fafc;
+}
+table.calc tbody td {
+  text-align: right;
+}
+table.calc tbody td.text-left,
+table.calc thead th.text-left {
+  text-align: left;
+}
+
+/* table.calc-wide — non-wrapping dense cost-flow table */
 table.calc-wide th,
 table.calc-wide td {
   white-space: nowrap;

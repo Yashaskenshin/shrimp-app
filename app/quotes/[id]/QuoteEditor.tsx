@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState, useTransition, useEffect, useRef } from "react";
+import { useToast } from "@/app/components/Toaster";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -237,7 +238,9 @@ export function QuoteEditor(props: Props) {
 
   const [priceHistoryCache, setPriceHistoryCache] = useState<Record<string, PriceHistoryEntry[]>>({});
   const [actionError, setActionError] = useState<string | null>(null);
+  const [openSections, setOpenSections] = useState({ header: true, auditLog: false });
 
+  const toast = useToast();
   const [saving, startSave] = useTransition();
   const [statusBusy, startStatus] = useTransition();
 
@@ -434,6 +437,7 @@ export function QuoteEditor(props: Props) {
 
   function handleSave() {
     startSave(async () => {
+      try {
       const cv = persistCustom(customVarUI, rows);
       const cf = persistCustom(customFixUI, rows);
       const payload: SaveQuotePayload = {
@@ -487,7 +491,11 @@ export function QuoteEditor(props: Props) {
         })),
       };
       await saveQuote(payload);
+      toast.success("Saved");
       router.refresh();
+      } catch {
+        toast.error("Save failed — please try again");
+      }
     });
   }
 
@@ -496,29 +504,40 @@ export function QuoteEditor(props: Props) {
       const res = await transitionQuote(header.id, action);
       if (!res.ok) {
         setActionError(res.error);
+        toast.error(res.error);
         return;
       }
       setActionError(null);
+      toast.success(`Status → ${res.status}`);
       router.refresh();
     });
   }
 
+  const statusColors: Record<string, string> = {
+    DRAFT: "bg-slate-100 text-slate-600",
+    SUBMITTED: "bg-blue-100 text-blue-700",
+    VERIFIED: "bg-violet-100 text-violet-700",
+    APPROVED: "bg-emerald-100 text-emerald-700",
+    REJECTED: "bg-rose-100 text-rose-700",
+    SENT: "bg-teal-100 text-teal-700",
+  };
+
   return (
-    <div className="space-y-8">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <div className="text-xs uppercase tracking-wide text-slate-500">Quote</div>
-          <h1 className="text-2xl font-semibold">
+    <div>
+      {/* Sticky action bar */}
+      <div className="sticky top-14 z-30 -mx-6 mb-6 flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 bg-white px-6 py-3 shadow-sm">
+        <div className="flex items-center gap-3 min-w-0">
+          <h1 className="truncate text-lg font-semibold text-slate-900">
             {header.poNo || <span className="text-slate-400">Unsaved PO</span>}
-            <span className="ml-3 rounded bg-slate-100 px-2 py-1 text-xs font-medium text-slate-700">
-              {header.status}
-            </span>
-            {totalWarnings > 0 && (
-              <span className="ml-2 rounded bg-amber-100 px-2 py-1 text-xs font-medium text-amber-800">
-                ⚠ {totalWarnings} warning{totalWarnings > 1 ? "s" : ""}
-              </span>
-            )}
           </h1>
+          <span className={`shrink-0 rounded px-2 py-0.5 text-xs font-semibold ${statusColors[header.status] ?? "bg-slate-100 text-slate-600"}`}>
+            {header.status}
+          </span>
+          {totalWarnings > 0 && (
+            <span className="shrink-0 rounded bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">
+              ⚠ {totalWarnings}
+            </span>
+          )}
         </div>
         <div className="flex flex-wrap gap-2">
           <button onClick={handleSave} disabled={saving} className="btn-primary">
@@ -564,13 +583,31 @@ export function QuoteEditor(props: Props) {
         </div>
       </div>
 
+      <div className="space-y-6">
+
       {actionError && (
         <div className="rounded-md border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
           <strong>Cannot proceed:</strong> {actionError}
         </div>
       )}
 
-      <div className="card grid grid-cols-1 gap-4 md:grid-cols-3 lg:grid-cols-4">
+      <div className="card">
+        <button
+          type="button"
+          className="flex w-full items-center justify-between text-left"
+          onClick={() => setOpenSections((s) => ({ ...s, header: !s.header }))}
+        >
+          <h2 className="text-base font-semibold text-slate-900">Quote details</h2>
+          <span className="text-xs text-slate-400">{openSections.header ? "▲ collapse" : "▼ expand"}</span>
+        </button>
+        {!openSections.header && (
+          <p className="mt-1 text-sm text-slate-500">
+            {[header.customer, header.country, header.plant, header.incoterm].filter(Boolean).join(" · ") || "No details filled in yet"}
+          </p>
+        )}
+      </div>
+
+      {openSections.header && <div className="card grid grid-cols-1 gap-4 md:grid-cols-3 lg:grid-cols-4">
         <Field label="PO No">
           <input
             className="input"
@@ -720,7 +757,7 @@ export function QuoteEditor(props: Props) {
             onChange={(e) => setHeader({ ...header, approvedBy: e.target.value || null })}
           />
         </Field>
-      </div>
+      </div>}
 
       <div className="card">
         <h2 className="mb-4 text-base font-semibold">What-if (live, not saved)</h2>
@@ -733,6 +770,21 @@ export function QuoteEditor(props: Props) {
 
       {/* Sell information */}
       <div className="card">
+        {totalWarnings > 0 && (
+          <div className="mb-4 rounded-md border border-amber-200 bg-amber-50 p-3">
+            <p className="mb-1.5 text-sm font-semibold text-amber-800">
+              ⚠ {totalWarnings} input issue{totalWarnings > 1 ? "s" : ""} — quote will calculate with gaps
+            </p>
+            <ul className="space-y-0.5 text-xs text-amber-700">
+              {Object.entries(lineWarnings).flatMap(([lineNo, warns]) =>
+                warns.map((w, i) => (
+                  <li key={`${lineNo}-${i}`}>Line {lineNo}: {w}</li>
+                )),
+              )}
+            </ul>
+          </div>
+        )}
+
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <div>
             <h2 className="text-lg font-semibold text-slate-900">Sell information</h2>
@@ -936,20 +988,35 @@ export function QuoteEditor(props: Props) {
       </div>
 
       <div className="card">
-        <h2 className="mb-2 text-base font-semibold">Audit log</h2>
-        {props.events.length === 0 ? (
-          <p className="text-sm text-slate-500">No events.</p>
-        ) : (
-          <ul className="space-y-1 text-sm">
-            {props.events.map((e) => (
-              <li key={e.id} className="flex items-center justify-between border-b border-slate-100 py-2">
-                <span className="font-medium text-slate-700">{e.action}</span>
-                <span className="text-slate-500">{new Date(e.createdAt).toLocaleString("en-IN")}</span>
-              </li>
-            ))}
-          </ul>
+        <button
+          type="button"
+          className="flex w-full items-center justify-between text-left"
+          onClick={() => setOpenSections((s) => ({ ...s, auditLog: !s.auditLog }))}
+        >
+          <h2 className="text-base font-semibold text-slate-900">
+            Audit log
+            <span className="ml-2 text-xs font-normal text-slate-400">({props.events.length} events)</span>
+          </h2>
+          <span className="text-xs text-slate-400">{openSections.auditLog ? "▲ collapse" : "▼ expand"}</span>
+        </button>
+        {openSections.auditLog && (
+          props.events.length === 0 ? (
+            <p className="mt-3 text-sm text-slate-500">No events.</p>
+          ) : (
+            <ul className="mt-3 space-y-1 text-sm">
+              {props.events.map((e) => (
+                <li key={e.id} className="flex items-center justify-between border-b border-slate-100 py-2">
+                  <span className="font-medium text-slate-700">{e.action}</span>
+                  {e.comment && <span className="mx-3 truncate text-slate-500">{e.comment}</span>}
+                  <span className="shrink-0 text-slate-400">{new Date(e.createdAt).toLocaleString("en-IN")}</span>
+                </li>
+              ))}
+            </ul>
+          )
         )}
       </div>
+
+      </div>{/* end space-y-6 */}
     </div>
   );
 }
