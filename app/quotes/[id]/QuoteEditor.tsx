@@ -508,6 +508,7 @@ export function QuoteEditor(props: Props) {
         return;
       }
       setActionError(null);
+      setHeader((h) => ({ ...h, status: res.status }));
       toast.success(`Status → ${res.status}`);
       router.refresh();
     });
@@ -571,9 +572,17 @@ export function QuoteEditor(props: Props) {
           <Link href={`/quotes/${header.id}/pdf`} target="_blank" className="btn-secondary">
             PDF / Print
           </Link>
-          <form action={async () => { await duplicateQuote(header.id); }}>
-            <button type="submit" className="btn-secondary">Duplicate</button>
-          </form>
+          <button
+            type="button"
+            className="btn-secondary"
+            onClick={() => {
+              if (confirm("Duplicate this quote? A copy will be created in DRAFT.")) {
+                duplicateQuote(header.id);
+              }
+            }}
+          >
+            Duplicate
+          </button>
           <form
             action={async () => { await deleteQuote(header.id); }}
             onSubmit={(e) => { if (!confirm("Delete this quote?")) e.preventDefault(); }}
@@ -729,11 +738,27 @@ export function QuoteEditor(props: Props) {
             onChange={(e) => setHeader({ ...header, contractDate: e.target.value || null })}
           />
         </Field>
+        <Field label="Revised date">
+          <input
+            type="date"
+            className="input"
+            value={header.revisedDate ? header.revisedDate.slice(0, 10) : ""}
+            onChange={(e) => setHeader({ ...header, revisedDate: e.target.value || null })}
+          />
+        </Field>
         <Field label="Port of loading">
           <input
             className="input"
             value={header.portLoading ?? ""}
             onChange={(e) => setHeader({ ...header, portLoading: e.target.value || null })}
+          />
+        </Field>
+        <Field label="Port loading date">
+          <input
+            type="date"
+            className="input"
+            value={header.portLoadingDate ? header.portLoadingDate.slice(0, 10) : ""}
+            onChange={(e) => setHeader({ ...header, portLoadingDate: e.target.value || null })}
           />
         </Field>
         <Field label="Port of destination">
@@ -743,11 +768,26 @@ export function QuoteEditor(props: Props) {
             onChange={(e) => setHeader({ ...header, portDestination: e.target.value || null })}
           />
         </Field>
+        <Field label="Port dest. date">
+          <input
+            type="date"
+            className="input"
+            value={header.portDestDate ? header.portDestDate.slice(0, 10) : ""}
+            onChange={(e) => setHeader({ ...header, portDestDate: e.target.value || null })}
+          />
+        </Field>
         <Field label="Prepared by">
           <input
             className="input"
             value={header.preparedBy ?? ""}
             onChange={(e) => setHeader({ ...header, preparedBy: e.target.value || null })}
+          />
+        </Field>
+        <Field label="Verified by">
+          <input
+            className="input"
+            value={header.verifiedBy ?? ""}
+            onChange={(e) => setHeader({ ...header, verifiedBy: e.target.value || null })}
           />
         </Field>
         <Field label="Approved by">
@@ -757,6 +797,16 @@ export function QuoteEditor(props: Props) {
             onChange={(e) => setHeader({ ...header, approvedBy: e.target.value || null })}
           />
         </Field>
+        <div className="lg:col-span-4 md:col-span-3">
+          <Field label="Notes">
+            <textarea
+              rows={2}
+              className="input h-auto py-2 leading-snug"
+              value={header.notes ?? ""}
+              onChange={(e) => setHeader({ ...header, notes: e.target.value || null })}
+            />
+          </Field>
+        </div>
       </div>}
 
       <div className="card">
@@ -855,6 +905,9 @@ export function QuoteEditor(props: Props) {
                         {lastQuote && (
                           <div className="mt-0.5 text-[11px] text-slate-400 tabular-nums">
                             Last: ${lastQuote.usdPerKg.toFixed(2)}
+                            {lastQuote.quote.contractDate
+                              ? ` · ${new Date(lastQuote.quote.contractDate).toLocaleDateString("en-IN")}`
+                              : ""}
                             {lastQuote.quote.customer ? ` · ${lastQuote.quote.customer}` : ""}
                           </div>
                         )}
