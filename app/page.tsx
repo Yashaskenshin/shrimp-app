@@ -7,6 +7,15 @@ import { buildQuoteComputeInput } from "@/lib/quoteCompute";
 /** Avoid Prisma at static generation time — dashboard always reads live DB on request. */
 export const dynamic = "force-dynamic";
 
+const STATUS_COLORS: Record<string, string> = {
+  DRAFT: "bg-slate-100 text-slate-700",
+  SUBMITTED: "bg-blue-100 text-blue-700",
+  VERIFIED: "bg-violet-100 text-violet-700",
+  APPROVED: "bg-emerald-100 text-emerald-700",
+  REJECTED: "bg-rose-100 text-rose-700",
+  SENT: "bg-teal-100 text-teal-700",
+};
+
 function fmtCurrency(n: number, digits = 0) {
   return new Intl.NumberFormat("en-IN", {
     style: "currency",
@@ -125,9 +134,9 @@ export default async function Dashboard() {
         <h2 className="mb-3 text-base font-semibold">By status</h2>
         <div className="flex flex-wrap gap-3 text-sm">
           {Object.entries(d.byStatus).map(([k, v]) => (
-            <div key={k} className="rounded-full bg-slate-100 px-3 py-1">
-              <span className="font-medium text-slate-700">{k}</span>
-              <span className="ml-2 tabular-nums text-slate-900">{v}</span>
+            <div key={k} className={`rounded-full px-3 py-1 ${STATUS_COLORS[k] ?? "bg-slate-100 text-slate-700"}`}>
+              <span className="font-medium">{k}</span>
+              <span className="ml-2 tabular-nums">{v}</span>
             </div>
           ))}
         </div>
@@ -163,7 +172,11 @@ export default async function Dashboard() {
                   <td className="text-left">{q.poNo || <span className="text-slate-400">—</span>}</td>
                   <td className="text-left">{q.customer || "—"}</td>
                   <td className="text-left">{q.country || "—"}</td>
-                  <td className="text-left">{q.status}</td>
+                  <td className="text-left">
+                    <span className={`rounded px-1.5 py-0.5 text-xs font-semibold ${STATUS_COLORS[q.status] ?? "bg-slate-100 text-slate-700"}`}>
+                      {q.status}
+                    </span>
+                  </td>
                   <td>{q.fxRate.toFixed(4)}</td>
                   <td>{q.createdAt.toLocaleDateString("en-IN")}</td>
                   <td>
