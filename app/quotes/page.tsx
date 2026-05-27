@@ -76,7 +76,7 @@ export default async function QuotesList({
             <Link
               key={s}
               href={`/quotes?status=${s}${q ? `&q=${encodeURIComponent(q)}` : ""}`}
-              className={`rounded px-2 py-1 text-xs font-medium ${status === s ? "bg-slate-800 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}
+              className={`rounded px-2 py-1 text-xs font-medium ${status === s ? `${STATUS_COLORS[s]} ring-1 ring-current ring-offset-1` : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}
             >
               {s}
             </Link>

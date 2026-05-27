@@ -37,11 +37,9 @@ async function getDashboard() {
 
   const processingTable = pcRates.map((r) => ({
     plant: r.plant,
-    productG: r.productG,
     product: r.product,
     freezeType: r.freezeType,
     packSize: r.packSize,
-    countSize: r.countSize,
     rsPerKg: r.rsPerKg,
   }));
 

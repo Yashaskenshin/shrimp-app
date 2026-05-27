@@ -252,6 +252,21 @@ export function QuoteEditor(props: Props) {
     setCustomFixUI((cf) => resizeCustomValues(cf, rows.length));
   }, [rows.length]);
 
+  // Unsaved-changes tracking
+  const [changed, setChanged] = useState(false);
+  const isFirstRender = useRef(true);
+  useEffect(() => {
+    if (isFirstRender.current) { isFirstRender.current = false; return; }
+    setChanged(true);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rows, header, customVarUI, customFixUI]);
+  useEffect(() => {
+    if (!changed) return;
+    function handler(e: BeforeUnloadEvent) { e.preventDefault(); e.returnValue = ""; }
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [changed]);
+
   const calcInput = useMemo(() => {
     const customVariableCosts = persistCustom(customVarUI, rows);
     const customFixedCosts = persistCustom(customFixUI, rows);
@@ -435,72 +450,87 @@ export function QuoteEditor(props: Props) {
     );
   }
 
-  function handleSave() {
-    startSave(async () => {
-      try {
-      const cv = persistCustom(customVarUI, rows);
-      const cf = persistCustom(customFixUI, rows);
-      const payload: SaveQuotePayload = {
-        id: header.id,
-        poNo: header.poNo,
-        contractDate: header.contractDate,
-        revisedDate: header.revisedDate,
-        customer: header.customer,
-        country: header.country,
-        incoterm: header.incoterm,
-        payment: header.payment,
-        plant: header.plant,
-        freezeType: header.freezeType,
-        commissionOverridePerKg: header.commissionOverridePerKg,
-        processingChargeWithGst: header.processingChargeWithGst,
-        portLoading: header.portLoading,
-        portLoadingDate: header.portLoadingDate,
-        portDestination: header.portDestination,
-        portDestDate: header.portDestDate,
-        fxRate: header.fxRate,
-        notes: header.notes,
-        preparedBy: header.preparedBy,
-        verifiedBy: header.verifiedBy,
-        approvedBy: header.approvedBy,
-        customVariableCosts: cv,
-        customFixedCosts: cf,
-        lines: rows.map<SaveLine>((r) => ({
-          lineNo: r.lineNo,
-          productCode: r.productCode,
-          productName: r.productName,
-          sizeBand: r.sizeBand,
-          pack: r.pack,
-          weightKg: r.weightKg,
-          usdPerKg: r.usdPerKg,
-          // Excel keeps a separate "Stock FG" cell but it always equals the
-          // line weight in this workflow, so we mirror it on save and never
-          // expose it as its own input.
-          stockFgKg: r.weightKg,
-          // "Stock cost Rs/kg" was a free cell in the legacy sheet that wasn't
-          // wired into the cost build-up — keep it null so old rows clear.
-          stockCostRs: null,
-          rmPriceRs: r.rmPriceRs,
-          yieldPctOverride: r.yieldPctOverride,
-          avgSizeOverride: r.avgSizeOverride,
-          packagingRs: r.packagingRs,
-          additiveRs: r.additiveRs,
-          processingChargeRs: r.processingChargeRs,
-          commissionRs: r.commissionRs,
-          exportShipmentRs: r.exportShipmentRs,
-          ddpRs: r.ddpRs,
-        })),
-      };
-      await saveQuote(payload);
-      toast.success("Saved");
-      router.refresh();
-      } catch {
-        toast.error("Save failed — please try again");
+  function buildPayload(): SaveQuotePayload {
+    const cv = persistCustom(customVarUI, rows);
+    const cf = persistCustom(customFixUI, rows);
+    return {
+      id: header.id,
+      poNo: header.poNo,
+      contractDate: header.contractDate,
+      revisedDate: header.revisedDate,
+      customer: header.customer,
+      country: header.country,
+      incoterm: header.incoterm,
+      payment: header.payment,
+      plant: header.plant,
+      freezeType: header.freezeType,
+      commissionOverridePerKg: header.commissionOverridePerKg,
+      processingChargeWithGst: header.processingChargeWithGst,
+      portLoading: header.portLoading,
+      portLoadingDate: header.portLoadingDate,
+      portDestination: header.portDestination,
+      portDestDate: header.portDestDate,
+      fxRate: header.fxRate,
+      notes: header.notes,
+      preparedBy: header.preparedBy,
+      verifiedBy: header.verifiedBy,
+      approvedBy: header.approvedBy,
+      customVariableCosts: cv,
+      customFixedCosts: cf,
+      lines: rows.map<SaveLine>((r) => ({
+        lineNo: r.lineNo,
+        productCode: r.productCode,
+        productName: r.productName,
+        sizeBand: r.sizeBand,
+        pack: r.pack,
+        weightKg: r.weightKg,
+        usdPerKg: r.usdPerKg,
+        stockFgKg: r.weightKg,
+        stockCostRs: null,
+        rmPriceRs: r.rmPriceRs,
+        yieldPctOverride: r.yieldPctOverride,
+        avgSizeOverride: r.avgSizeOverride,
+        packagingRs: r.packagingRs,
+        additiveRs: r.additiveRs,
+        processingChargeRs: r.processingChargeRs,
+        commissionRs: r.commissionRs,
+        exportShipmentRs: r.exportShipmentRs,
+        ddpRs: r.ddpRs,
+      })),
+    };
+  }
+
+  async function performSave(opts: { silent?: boolean } = {}): Promise<boolean> {
+    try {
+      await saveQuote(buildPayload());
+      setChanged(false);
+      if (!opts.silent) {
+        toast.success("Saved");
+        router.refresh();
       }
-    });
+      return true;
+    } catch {
+      toast.error("Save failed — please try again");
+      return false;
+    }
+  }
+
+  function handleSave() {
+    if (
+      header.status === "APPROVED" &&
+      !confirm(
+        "This quote is APPROVED. Saving modifies the live data but the approval snapshot stays unchanged. Continue?",
+      )
+    ) return;
+    startSave(async () => { await performSave(); });
   }
 
   function handleAction(action: QuoteAction) {
     startStatus(async () => {
+      if (changed) {
+        const ok = await performSave({ silent: true });
+        if (!ok) return;
+      }
       const res = await transitionQuote(header.id, action);
       if (!res.ok) {
         setActionError(res.error);
@@ -508,6 +538,7 @@ export function QuoteEditor(props: Props) {
         return;
       }
       setActionError(null);
+      setHeader((h) => ({ ...h, status: res.status }));
       toast.success(`Status → ${res.status}`);
       router.refresh();
     });
@@ -541,7 +572,7 @@ export function QuoteEditor(props: Props) {
         </div>
         <div className="flex flex-wrap gap-2">
           <button onClick={handleSave} disabled={saving} className="btn-primary">
-            {saving ? "Saving…" : "Save"}
+            {saving ? "Saving…" : changed ? "Save ●" : "Save"}
           </button>
           {header.status === "DRAFT" && (
             <button onClick={() => handleAction("SUBMIT")} disabled={statusBusy} className="btn-secondary">
@@ -558,12 +589,17 @@ export function QuoteEditor(props: Props) {
               Approve & Snapshot
             </button>
           )}
-          {header.status !== "DRAFT" && header.status !== "APPROVED" && (
+          {header.status === "APPROVED" && (
+            <button onClick={() => handleAction("SEND")} disabled={statusBusy} className="btn-primary">
+              Mark as Sent
+            </button>
+          )}
+          {header.status !== "DRAFT" && header.status !== "APPROVED" && header.status !== "SENT" && (
             <button onClick={() => handleAction("REVERT_DRAFT")} disabled={statusBusy} className="btn-secondary">
               Revert to Draft
             </button>
           )}
-          {header.status !== "REJECTED" && (
+          {header.status !== "REJECTED" && header.status !== "SENT" && (
             <button onClick={() => handleAction("REJECT")} disabled={statusBusy} className="btn-danger">
               Reject
             </button>
@@ -571,9 +607,17 @@ export function QuoteEditor(props: Props) {
           <Link href={`/quotes/${header.id}/pdf`} target="_blank" className="btn-secondary">
             PDF / Print
           </Link>
-          <form action={async () => { await duplicateQuote(header.id); }}>
-            <button type="submit" className="btn-secondary">Duplicate</button>
-          </form>
+          <button
+            type="button"
+            className="btn-secondary"
+            onClick={() => {
+              if (confirm("Duplicate this quote? A copy will be created in DRAFT.")) {
+                duplicateQuote(header.id);
+              }
+            }}
+          >
+            Duplicate
+          </button>
           <form
             action={async () => { await deleteQuote(header.id); }}
             onSubmit={(e) => { if (!confirm("Delete this quote?")) e.preventDefault(); }}
@@ -588,6 +632,12 @@ export function QuoteEditor(props: Props) {
       {actionError && (
         <div className="rounded-md border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
           <strong>Cannot proceed:</strong> {actionError}
+        </div>
+      )}
+
+      {header.status === "APPROVED" && (
+        <div className="rounded-md border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+          <strong>Approved quote:</strong> A calculation snapshot was taken when this was approved. Any edits you save here will not affect the snapshot used for reporting.
         </div>
       )}
 
@@ -729,11 +779,27 @@ export function QuoteEditor(props: Props) {
             onChange={(e) => setHeader({ ...header, contractDate: e.target.value || null })}
           />
         </Field>
+        <Field label="Revised date">
+          <input
+            type="date"
+            className="input"
+            value={header.revisedDate ? header.revisedDate.slice(0, 10) : ""}
+            onChange={(e) => setHeader({ ...header, revisedDate: e.target.value || null })}
+          />
+        </Field>
         <Field label="Port of loading">
           <input
             className="input"
             value={header.portLoading ?? ""}
             onChange={(e) => setHeader({ ...header, portLoading: e.target.value || null })}
+          />
+        </Field>
+        <Field label="Port loading date">
+          <input
+            type="date"
+            className="input"
+            value={header.portLoadingDate ? header.portLoadingDate.slice(0, 10) : ""}
+            onChange={(e) => setHeader({ ...header, portLoadingDate: e.target.value || null })}
           />
         </Field>
         <Field label="Port of destination">
@@ -743,11 +809,26 @@ export function QuoteEditor(props: Props) {
             onChange={(e) => setHeader({ ...header, portDestination: e.target.value || null })}
           />
         </Field>
+        <Field label="Port dest. date">
+          <input
+            type="date"
+            className="input"
+            value={header.portDestDate ? header.portDestDate.slice(0, 10) : ""}
+            onChange={(e) => setHeader({ ...header, portDestDate: e.target.value || null })}
+          />
+        </Field>
         <Field label="Prepared by">
           <input
             className="input"
             value={header.preparedBy ?? ""}
             onChange={(e) => setHeader({ ...header, preparedBy: e.target.value || null })}
+          />
+        </Field>
+        <Field label="Verified by">
+          <input
+            className="input"
+            value={header.verifiedBy ?? ""}
+            onChange={(e) => setHeader({ ...header, verifiedBy: e.target.value || null })}
           />
         </Field>
         <Field label="Approved by">
@@ -757,6 +838,16 @@ export function QuoteEditor(props: Props) {
             onChange={(e) => setHeader({ ...header, approvedBy: e.target.value || null })}
           />
         </Field>
+        <div className="lg:col-span-4 md:col-span-3">
+          <Field label="Notes">
+            <textarea
+              rows={2}
+              className="input h-auto py-2 leading-snug"
+              value={header.notes ?? ""}
+              onChange={(e) => setHeader({ ...header, notes: e.target.value || null })}
+            />
+          </Field>
+        </div>
       </div>}
 
       <div className="card">
@@ -855,6 +946,9 @@ export function QuoteEditor(props: Props) {
                         {lastQuote && (
                           <div className="mt-0.5 text-[11px] text-slate-400 tabular-nums">
                             Last: ${lastQuote.usdPerKg.toFixed(2)}
+                            {lastQuote.quote.contractDate
+                              ? ` · ${new Date(lastQuote.quote.contractDate).toLocaleDateString("en-IN")}`
+                              : ""}
                             {lastQuote.quote.customer ? ` · ${lastQuote.quote.customer}` : ""}
                           </div>
                         )}

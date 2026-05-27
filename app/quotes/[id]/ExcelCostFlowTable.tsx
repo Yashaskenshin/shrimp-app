@@ -14,7 +14,6 @@ export interface ExcelFlowSellLine {
   productCode: string | null;
   productName: string | null;
   weightKg: number;
-  stockCostRs: number | null;
   rmPriceRs: number | null;
   yieldPctOverride: number | null;
   avgSizeOverride: number | null;
@@ -251,20 +250,6 @@ export function ExcelCostFlowTable({
             >
               Variable cost
             </td>
-          </tr>
-          <tr>
-            <td className={`${stickyLabel} bg-white text-slate-700`}>
-              Stock cost
-              <span className="mt-0.5 block text-[10px] font-normal text-slate-500">
-                Reference only — not inside Excel variable total (rows 37–46)
-              </span>
-            </td>
-            {rows.map((r) => (
-              <td key={r.lineNo} className="bg-white px-2 py-1.5 text-right tabular-nums">
-                {r.stockCostRs != null && r.stockCostRs !== 0 ? inr(r.stockCostRs, 2) : "—"}
-              </td>
-            ))}
-            <td className="bg-slate-50 px-2 py-1.5 text-right text-slate-400">—</td>
           </tr>
           {flowMoneyRow("Raw material meat", "bg-white", "bg-white", (lr) => lr.rmMeatRs, <span className="text-slate-400">—</span>)}
           {flowMoneyRow(

@@ -30,11 +30,9 @@ export default async function QuotePage(
 
   const processingRatesProps = processingRates.map((r) => ({
     plant: r.plant,
-    productG: r.productG,
     product: r.product,
     freezeType: r.freezeType,
     packSize: r.packSize,
-    countSize: r.countSize,
     rsPerKg: r.rsPerKg,
   }));
 
