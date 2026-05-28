@@ -181,34 +181,31 @@ export default async function QuotesList({
                 <th className="text-right text-slate-500">Rev USD&apos;000</th>
                 <th className="text-right text-slate-500">Lines</th>
                 <SortTh col="updatedAt" label="Updated" sort={sort} dir={dir} q={q} status={status} />
-                <th></th>
               </tr>
             </thead>
             <tbody>
               {quotes.map((q) => {
                 const revUsd = q.lines.reduce((s, l) => s + l.usdPerKg * l.weightKg, 0) / 1000;
                 return (
-                  <tr key={q.id}>
-                    <td className="text-left font-medium">{q.poNo || <span className="text-slate-400">—</span>}</td>
-                    <td className="text-left">{q.customer || "—"}</td>
-                    <td className="text-left">
+                  <tr key={q.id} className="group relative cursor-pointer hover:bg-slate-50">
+                    <td className="text-left font-medium">
+                      <Link href={`/quotes/${q.id}`} className="absolute inset-0" aria-label={q.poNo ?? "Open quote"} />
+                      <span className="relative">{q.poNo || <span className="text-slate-400">—</span>}</span>
+                    </td>
+                    <td className="relative text-left text-slate-700">{q.customer || <span className="text-slate-400">—</span>}</td>
+                    <td className="relative text-left">
                       <span className={`rounded px-2 py-0.5 text-xs font-medium ${STATUS_COLORS[q.status] ?? "bg-slate-100 text-slate-600"}`}>
                         {q.status}
                       </span>
                     </td>
-                    <td className="tabular-nums text-right">{q.fxRate.toFixed(2)}</td>
-                    <td className="tabular-nums text-right">
+                    <td className="relative tabular-nums text-right text-slate-500">{q.fxRate.toFixed(2)}</td>
+                    <td className="relative tabular-nums text-right">
                       {revUsd > 0
                         ? new Intl.NumberFormat("en-IN", { maximumFractionDigits: 1 }).format(revUsd)
                         : <span className="text-slate-400">—</span>}
                     </td>
-                    <td className="text-right">{q._count.lines}</td>
-                    <td className="text-slate-500">{q.updatedAt.toLocaleDateString("en-IN")}</td>
-                    <td>
-                      <Link href={`/quotes/${q.id}`} className="font-medium text-emerald-700 hover:underline">
-                        Open
-                      </Link>
-                    </td>
+                    <td className="relative text-right text-slate-500">{q._count.lines}</td>
+                    <td className="relative text-slate-400">{q.updatedAt.toLocaleDateString("en-IN")}</td>
                   </tr>
                 );
               })}

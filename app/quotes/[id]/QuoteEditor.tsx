@@ -584,74 +584,92 @@ export function QuoteEditor(props: Props) {
   return (
     <div>
       {/* Sticky action bar */}
-      <div className="sticky top-14 z-30 -mx-6 mb-6 flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 bg-white px-6 py-3 shadow-sm">
-        <div className="flex items-center gap-3 min-w-0">
-          <h1 className="truncate text-lg font-semibold text-slate-900">
-            {header.poNo || <span className="text-slate-400">Unsaved PO</span>}
-          </h1>
-          <span className={`shrink-0 rounded px-2 py-0.5 text-xs font-semibold ${statusColors[header.status] ?? "bg-slate-100 text-slate-600"}`}>
-            {header.status}
-          </span>
-          {totalWarnings > 0 && (
-            <span className="shrink-0 rounded bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">
-              ⚠ {totalWarnings}
+      <div className="sticky top-14 z-30 -mx-4 mb-6 border-b border-slate-100 bg-white/95 px-4 py-2.5 shadow-sm backdrop-blur sm:-mx-6 sm:px-6">
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Title + status */}
+          <div className="flex min-w-0 flex-1 items-center gap-2">
+            <h1 className="truncate text-base font-semibold text-slate-900">
+              {header.poNo || <span className="text-slate-400 font-normal">No PO number</span>}
+            </h1>
+            <span className={`shrink-0 rounded px-2 py-0.5 text-[11px] font-bold tracking-wide ${statusColors[header.status] ?? "bg-slate-100 text-slate-600"}`}>
+              {header.status}
             </span>
-          )}
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <button onClick={handleSave} disabled={saving} className="btn-primary">
-            {saving ? "Saving…" : changed ? "Save ●" : "Save"}
+            {totalWarnings > 0 && (
+              <span className="shrink-0 rounded bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-700">
+                ⚠ {totalWarnings}
+              </span>
+            )}
+          </div>
+
+          {/* Save */}
+          <button onClick={handleSave} disabled={saving} className="btn-primary py-1.5 text-xs">
+            {saving ? "Saving…" : changed ? "● Save" : "Save"}
           </button>
-          {header.status === "DRAFT" && (
-            <button onClick={() => handleAction("SUBMIT")} disabled={statusBusy} className="btn-secondary">
-              Submit
+
+          {/* Status actions */}
+          <div className="flex items-center gap-1.5 border-l border-slate-200 pl-2">
+            {header.status === "DRAFT" && (
+              <button onClick={() => handleAction("SUBMIT")} disabled={statusBusy} className="btn-secondary py-1.5 text-xs">
+                Submit
+              </button>
+            )}
+            {header.status === "SUBMITTED" && (
+              <button onClick={() => handleAction("VERIFY")} disabled={statusBusy} className="btn-secondary py-1.5 text-xs">
+                Verify
+              </button>
+            )}
+            {(header.status === "VERIFIED" || header.status === "SUBMITTED") && (
+              <button onClick={() => handleAction("APPROVE")} disabled={statusBusy} className="btn-primary py-1.5 text-xs">
+                Approve ✓
+              </button>
+            )}
+            {header.status === "APPROVED" && (
+              <button onClick={() => handleAction("SEND")} disabled={statusBusy} className="btn-primary py-1.5 text-xs">
+                Mark Sent
+              </button>
+            )}
+            {header.status !== "DRAFT" && header.status !== "APPROVED" && header.status !== "SENT" && (
+              <button onClick={() => handleAction("REVERT_DRAFT")} disabled={statusBusy} className="btn-secondary py-1.5 text-xs">
+                ↩ Draft
+              </button>
+            )}
+            {header.status !== "REJECTED" && header.status !== "SENT" && (
+              <button onClick={() => handleAction("REJECT")} disabled={statusBusy} className="rounded bg-rose-50 px-2.5 py-1.5 text-xs font-medium text-rose-700 transition-colors hover:bg-rose-100">
+                Reject
+              </button>
+            )}
+          </div>
+
+          {/* Utilities */}
+          <div className="flex items-center gap-1.5 border-l border-slate-200 pl-2">
+            <Link href={`/quotes/${header.id}/pdf`} target="_blank" title="Open PDF / print view" className="btn-secondary py-1.5 text-xs">
+              PDF
+            </Link>
+            <button
+              type="button"
+              title="Duplicate this quote"
+              className="btn-secondary py-1.5 text-xs"
+              onClick={() => {
+                if (confirm("Duplicate this quote? A copy will be created in DRAFT.")) {
+                  duplicateQuote(header.id);
+                }
+              }}
+            >
+              Copy
             </button>
-          )}
-          {header.status === "SUBMITTED" && (
-            <button onClick={() => handleAction("VERIFY")} disabled={statusBusy} className="btn-secondary">
-              Verify
-            </button>
-          )}
-          {(header.status === "VERIFIED" || header.status === "SUBMITTED") && (
-            <button onClick={() => handleAction("APPROVE")} disabled={statusBusy} className="btn-primary">
-              Approve & Snapshot
-            </button>
-          )}
-          {header.status === "APPROVED" && (
-            <button onClick={() => handleAction("SEND")} disabled={statusBusy} className="btn-primary">
-              Mark as Sent
-            </button>
-          )}
-          {header.status !== "DRAFT" && header.status !== "APPROVED" && header.status !== "SENT" && (
-            <button onClick={() => handleAction("REVERT_DRAFT")} disabled={statusBusy} className="btn-secondary">
-              Revert to Draft
-            </button>
-          )}
-          {header.status !== "REJECTED" && header.status !== "SENT" && (
-            <button onClick={() => handleAction("REJECT")} disabled={statusBusy} className="btn-danger">
-              Reject
-            </button>
-          )}
-          <Link href={`/quotes/${header.id}/pdf`} target="_blank" className="btn-secondary">
-            PDF / Print
-          </Link>
-          <button
-            type="button"
-            className="btn-secondary"
-            onClick={() => {
-              if (confirm("Duplicate this quote? A copy will be created in DRAFT.")) {
-                duplicateQuote(header.id);
-              }
-            }}
-          >
-            Duplicate
-          </button>
-          <form
-            action={async () => { await deleteQuote(header.id); }}
-            onSubmit={(e) => { if (!confirm("Delete this quote?")) e.preventDefault(); }}
-          >
-            <button type="submit" className="btn-danger">Delete</button>
-          </form>
+          </div>
+
+          {/* Danger */}
+          <div className="flex items-center gap-1 border-l border-slate-200 pl-2">
+            <form
+              action={async () => { await deleteQuote(header.id); }}
+              onSubmit={(e) => { if (!confirm("Permanently delete this quote?")) e.preventDefault(); }}
+            >
+              <button type="submit" title="Delete quote" className="rounded px-2.5 py-1.5 text-xs font-medium text-slate-400 transition-colors hover:bg-rose-50 hover:text-rose-700">
+                Delete
+              </button>
+            </form>
+          </div>
         </div>
       </div>
 
@@ -679,233 +697,148 @@ export function QuoteEditor(props: Props) {
           <span className="text-xs text-slate-400">{openSections.header ? "▲ collapse" : "▼ expand"}</span>
         </button>
         {!openSections.header && (
-          <p className="mt-1 text-sm text-slate-500">
-            {[header.customer, header.country, header.plant, header.incoterm].filter(Boolean).join(" · ") || "No details filled in yet"}
-          </p>
+          <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm">
+            {header.customer && <span className="text-slate-700 font-medium">{header.customer}</span>}
+            {header.country && <span className="text-slate-500">{header.country}</span>}
+            {header.incoterm && <span className="rounded bg-slate-100 px-1.5 py-0.5 text-xs font-medium text-slate-600">{header.incoterm}</span>}
+            {header.payment && <span className="text-slate-500">{header.payment}</span>}
+            {header.plant && <span className="text-slate-500">Plant: {header.plant}</span>}
+            {header.portLoading && <span className="text-slate-500">📦 {header.portLoading}</span>}
+            {header.portDestination && <span className="text-slate-500">→ {header.portDestination}</span>}
+            {!header.customer && !header.country && !header.plant && (
+              <span className="text-slate-400">No details filled in — click to expand</span>
+            )}
+          </div>
         )}
       </div>
 
-      {openSections.header && <div className="card grid grid-cols-1 gap-4 md:grid-cols-3 lg:grid-cols-4">
-        <Field label="PO No">
-          <input
-            className="input"
-            value={header.poNo ?? ""}
-            onChange={(e) => setHeader({ ...header, poNo: e.target.value || null })}
-          />
-        </Field>
-        <Field label="Customer">
-          <input
-            list="ac-customers"
-            className="input"
-            value={header.customer ?? ""}
-            onChange={(e) => setHeader({ ...header, customer: e.target.value || null })}
-          />
-          <datalist id="ac-customers">
-            {props.autocomplete.customers.map((c) => <option key={c} value={c} />)}
-          </datalist>
-        </Field>
-        <Field label="Country">
-          <input
-            list="ac-countries"
-            className="input"
-            value={header.country ?? ""}
-            onChange={(e) => setHeader({ ...header, country: e.target.value || null })}
-          />
-          <datalist id="ac-countries">
-            {props.autocomplete.countries.map((c) => <option key={c} value={c} />)}
-          </datalist>
-        </Field>
-        <Field label="Plant">
-          <select
-            className="input"
-            value={header.plant ?? ""}
-            onChange={(e) => setHeader({ ...header, plant: e.target.value || null })}
-          >
-            <option value="">— select plant —</option>
-            {/* Show the current value even if it's no longer in the active list */}
-            {header.plant && !props.plantOptions.includes(header.plant) && (
-              <option value={header.plant}>{header.plant} (inactive)</option>
-            )}
-            {props.plantOptions.map((name) => (
-              <option key={name} value={name}>{name}</option>
-            ))}
-          </select>
-          <p className="mt-0.5 text-[11px] leading-snug text-slate-500">
-            Manage the list in <a href="/assumptions" className="text-emerald-700 hover:underline">Assumptions → Processing plants</a>. Required for variable processing Rs/kg auto-fill.
-          </p>
-        </Field>
-        <Field label="Freeze type (processing sheet)">
-          <select
-            className="input"
-            value={header.freezeType ?? ""}
-            onChange={(e) =>
-              setHeader({ ...header, freezeType: e.target.value ? e.target.value : null })
-            }
-          >
-            <option value="">Any (match pack + product only)</option>
-            <option value="Block">Block</option>
-            <option value="Semi IQF">Semi IQF</option>
-            <option value="IQF">IQF</option>
-          </select>
-        </Field>
-        <Field label="Commission Rs/kg (this quote)">
-          <input
-            type="number"
-            step={0.01}
-            className="input input-num"
-            placeholder="Global default if empty"
-            value={header.commissionOverridePerKg ?? ""}
-            onChange={(e) => {
-              const v = e.target.value;
-              if (v === "") setHeader({ ...header, commissionOverridePerKg: null });
-              else {
-                const n = Number(v);
-                setHeader({
-                  ...header,
-                  commissionOverridePerKg: Number.isFinite(n) ? n : null,
-                });
-              }
-            }}
-          />
-        </Field>
-        <Field label="Processing charge basis">
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
-              checked={header.processingChargeWithGst}
-              onChange={(e) =>
-                setHeader({ ...header, processingChargeWithGst: e.target.checked })
-              }
-            />
-            <span>Include 18% GST (Excel M col)</span>
-          </label>
-          <div className="mt-1 text-[11px] text-slate-500">
-            Off = ex-GST (Excel L col). On = ex-GST × 1.18.
+      {openSections.header && (
+        <div className="space-y-4">
+          {/* Section: Commercial */}
+          <div className="card">
+            <p className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-slate-400">Commercial</p>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+              <Field label="PO No">
+                <input className="input" value={header.poNo ?? ""} onChange={(e) => setHeader({ ...header, poNo: e.target.value || null })} />
+              </Field>
+              <Field label="Customer">
+                <input list="ac-customers" className="input" value={header.customer ?? ""} onChange={(e) => setHeader({ ...header, customer: e.target.value || null })} />
+                <datalist id="ac-customers">{props.autocomplete.customers.map((c) => <option key={c} value={c} />)}</datalist>
+              </Field>
+              <Field label="Country">
+                <input list="ac-countries" className="input" value={header.country ?? ""} onChange={(e) => setHeader({ ...header, country: e.target.value || null })} />
+                <datalist id="ac-countries">{props.autocomplete.countries.map((c) => <option key={c} value={c} />)}</datalist>
+              </Field>
+              <Field label="Incoterm">
+                <select className="input" value={header.incoterm ?? ""} onChange={(e) => setHeader({ ...header, incoterm: e.target.value || null })}>
+                  <option value="">—</option>
+                  {["FOB", "CIF", "CFR", "DDP", "EXW"].map((x) => <option key={x} value={x}>{x}</option>)}
+                </select>
+              </Field>
+              <Field label="Payment">
+                <input list="ac-payment" className="input" value={header.payment ?? ""} onChange={(e) => setHeader({ ...header, payment: e.target.value || null })} />
+                <datalist id="ac-payment">
+                  {["T/T Advance", "T/T 30 days", "T/T 60 days", "T/T 90 days", "L/C at sight", "L/C 30 days", "L/C 60 days", "L/C 90 days", "D/A 60 days", "D/P at sight", "CAD"].map((t) => <option key={t} value={t} />)}
+                </datalist>
+              </Field>
+              <Field label="Contract date">
+                <input type="date" className="input" value={header.contractDate ? header.contractDate.slice(0, 10) : ""} onChange={(e) => setHeader({ ...header, contractDate: e.target.value || null })} />
+              </Field>
+              <Field label="Revised date">
+                <input type="date" className="input" value={header.revisedDate ? header.revisedDate.slice(0, 10) : ""} onChange={(e) => setHeader({ ...header, revisedDate: e.target.value || null })} />
+              </Field>
+            </div>
           </div>
-        </Field>
-        <Field label="Incoterm">
-          <select
-            className="input"
-            value={header.incoterm ?? ""}
-            onChange={(e) => setHeader({ ...header, incoterm: e.target.value || null })}
-          >
-            <option value="">—</option>
-            {["FOB", "CIF", "CFR", "DDP", "EXW"].map((x) => (
-              <option key={x} value={x}>
-                {x}
-              </option>
-            ))}
-          </select>
-        </Field>
-        <Field label="Payment">
-          <input
-            list="ac-payment"
-            className="input"
-            value={header.payment ?? ""}
-            onChange={(e) => setHeader({ ...header, payment: e.target.value || null })}
-          />
-          <datalist id="ac-payment">
-            {["T/T Advance", "T/T 30 days", "T/T 60 days", "T/T 90 days", "L/C at sight", "L/C 30 days", "L/C 60 days", "L/C 90 days", "D/A 60 days", "D/P at sight", "CAD"].map((t) => (
-              <option key={t} value={t} />
-            ))}
-          </datalist>
-        </Field>
-        <Field label="USD / INR">
-          <input
-            type="number"
-            step="0.0001"
-            className="input input-num"
-            value={header.fxRate}
-            onChange={(e) => setHeader({ ...header, fxRate: Number(e.target.value) || 0 })}
-          />
-        </Field>
-        <Field label="Contract date">
-          <input
-            type="date"
-            className="input"
-            value={header.contractDate ? header.contractDate.slice(0, 10) : ""}
-            onChange={(e) => setHeader({ ...header, contractDate: e.target.value || null })}
-          />
-        </Field>
-        <Field label="Revised date">
-          <input
-            type="date"
-            className="input"
-            value={header.revisedDate ? header.revisedDate.slice(0, 10) : ""}
-            onChange={(e) => setHeader({ ...header, revisedDate: e.target.value || null })}
-          />
-        </Field>
-        <Field label="Port of loading">
-          <input
-            list="ac-port-loading"
-            className="input"
-            value={header.portLoading ?? ""}
-            onChange={(e) => setHeader({ ...header, portLoading: e.target.value || null })}
-          />
-          <datalist id="ac-port-loading">
-            {props.autocomplete.portsLoading.map((p) => <option key={p} value={p} />)}
-          </datalist>
-        </Field>
-        <Field label="Port loading date">
-          <input
-            type="date"
-            className="input"
-            value={header.portLoadingDate ? header.portLoadingDate.slice(0, 10) : ""}
-            onChange={(e) => setHeader({ ...header, portLoadingDate: e.target.value || null })}
-          />
-        </Field>
-        <Field label="Port of destination">
-          <input
-            list="ac-port-dest"
-            className="input"
-            value={header.portDestination ?? ""}
-            onChange={(e) => setHeader({ ...header, portDestination: e.target.value || null })}
-          />
-          <datalist id="ac-port-dest">
-            {props.autocomplete.portsDest.map((p) => <option key={p} value={p} />)}
-          </datalist>
-        </Field>
-        <Field label="Port dest. date">
-          <input
-            type="date"
-            className="input"
-            value={header.portDestDate ? header.portDestDate.slice(0, 10) : ""}
-            onChange={(e) => setHeader({ ...header, portDestDate: e.target.value || null })}
-          />
-        </Field>
-        <Field label="Prepared by">
-          <input
-            className="input"
-            value={header.preparedBy ?? ""}
-            onChange={(e) => setHeader({ ...header, preparedBy: e.target.value || null })}
-          />
-        </Field>
-        <Field label="Verified by">
-          <input
-            className="input"
-            value={header.verifiedBy ?? ""}
-            onChange={(e) => setHeader({ ...header, verifiedBy: e.target.value || null })}
-          />
-        </Field>
-        <Field label="Approved by">
-          <input
-            className="input"
-            value={header.approvedBy ?? ""}
-            onChange={(e) => setHeader({ ...header, approvedBy: e.target.value || null })}
-          />
-        </Field>
-        <div className="lg:col-span-4 md:col-span-3">
-          <Field label="Notes">
-            <textarea
-              rows={2}
-              className="input h-auto py-2 leading-snug"
-              value={header.notes ?? ""}
-              onChange={(e) => setHeader({ ...header, notes: e.target.value || null })}
-            />
-          </Field>
+
+          {/* Section: Shipping & Processing */}
+          <div className="card">
+            <p className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-slate-400">Shipping & Processing</p>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+              <Field label="Plant">
+                <select className="input" value={header.plant ?? ""} onChange={(e) => setHeader({ ...header, plant: e.target.value || null })}>
+                  <option value="">— select plant —</option>
+                  {header.plant && !props.plantOptions.includes(header.plant) && (
+                    <option value={header.plant}>{header.plant} (inactive)</option>
+                  )}
+                  {props.plantOptions.map((name) => <option key={name} value={name}>{name}</option>)}
+                </select>
+              </Field>
+              <Field label="Freeze type">
+                <select className="input" value={header.freezeType ?? ""} onChange={(e) => setHeader({ ...header, freezeType: e.target.value || null })}>
+                  <option value="">Any</option>
+                  <option value="Block">Block</option>
+                  <option value="Semi IQF">Semi IQF</option>
+                  <option value="IQF">IQF</option>
+                </select>
+              </Field>
+              <Field label="Port of loading">
+                <input list="ac-port-loading" className="input" value={header.portLoading ?? ""} onChange={(e) => setHeader({ ...header, portLoading: e.target.value || null })} />
+                <datalist id="ac-port-loading">{props.autocomplete.portsLoading.map((p) => <option key={p} value={p} />)}</datalist>
+              </Field>
+              <Field label="Loading date">
+                <input type="date" className="input" value={header.portLoadingDate ? header.portLoadingDate.slice(0, 10) : ""} onChange={(e) => setHeader({ ...header, portLoadingDate: e.target.value || null })} />
+              </Field>
+              <Field label="Port of destination">
+                <input list="ac-port-dest" className="input" value={header.portDestination ?? ""} onChange={(e) => setHeader({ ...header, portDestination: e.target.value || null })} />
+                <datalist id="ac-port-dest">{props.autocomplete.portsDest.map((p) => <option key={p} value={p} />)}</datalist>
+              </Field>
+              <Field label="Destination date">
+                <input type="date" className="input" value={header.portDestDate ? header.portDestDate.slice(0, 10) : ""} onChange={(e) => setHeader({ ...header, portDestDate: e.target.value || null })} />
+              </Field>
+            </div>
+          </div>
+
+          {/* Section: Financial */}
+          <div className="card">
+            <p className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-slate-400">Financial</p>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+              <Field label="USD / INR rate">
+                <input type="number" step="0.0001" className="input input-num" value={header.fxRate} onChange={(e) => setHeader({ ...header, fxRate: Number(e.target.value) || 0 })} />
+              </Field>
+              <Field label="Commission Rs/kg (override)">
+                <input type="number" step={0.01} className="input input-num" placeholder="Global default if empty"
+                  value={header.commissionOverridePerKg ?? ""}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    if (v === "") setHeader({ ...header, commissionOverridePerKg: null });
+                    else { const n = Number(v); setHeader({ ...header, commissionOverridePerKg: Number.isFinite(n) ? n : null }); }
+                  }}
+                />
+              </Field>
+              <div className="flex items-end pb-0.5">
+                <label className="flex cursor-pointer items-start gap-2 text-sm">
+                  <input type="checkbox" className="mt-0.5 h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500" checked={header.processingChargeWithGst} onChange={(e) => setHeader({ ...header, processingChargeWithGst: e.target.checked })} />
+                  <span>
+                    <span className="block text-xs font-medium text-slate-700">Processing charge + GST</span>
+                    <span className="block text-[11px] text-slate-500">Use Excel M col (L × 1.18)</span>
+                  </span>
+                </label>
+              </div>
+            </div>
+          </div>
+
+          {/* Section: Team & Notes */}
+          <div className="card">
+            <p className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-slate-400">Team & Notes</p>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <Field label="Prepared by">
+                <input className="input" value={header.preparedBy ?? ""} onChange={(e) => setHeader({ ...header, preparedBy: e.target.value || null })} />
+              </Field>
+              <Field label="Verified by">
+                <input className="input" value={header.verifiedBy ?? ""} onChange={(e) => setHeader({ ...header, verifiedBy: e.target.value || null })} />
+              </Field>
+              <Field label="Approved by">
+                <input className="input" value={header.approvedBy ?? ""} onChange={(e) => setHeader({ ...header, approvedBy: e.target.value || null })} />
+              </Field>
+              <div className="sm:col-span-2 lg:col-span-4">
+                <Field label="Notes">
+                  <textarea rows={2} className="input h-auto py-2 leading-snug" value={header.notes ?? ""} onChange={(e) => setHeader({ ...header, notes: e.target.value || null })} />
+                </Field>
+              </div>
+            </div>
+          </div>
         </div>
-      </div>}
+      )}
 
       {/* Sell information */}
       <div className="card">

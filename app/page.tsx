@@ -123,35 +123,59 @@ export default async function Dashboard() {
     .map((status) => ({ status, count: d.byStatus[status] ?? 0 }))
     .filter((s) => s.count > 0);
 
-  const stat = (label: string, value: string, sub?: string) => (
-    <div className="card flex-1">
-      <div className="text-xs font-medium uppercase tracking-wide text-slate-500">{label}</div>
-      <div className="mt-1 text-2xl font-semibold text-slate-900">{value}</div>
-      {sub && <div className="mt-0.5 text-xs text-slate-500">{sub}</div>}
-    </div>
-  );
+  const profitPct = d.totalRevenueInr > 0
+    ? ((d.totalProfitInr / d.totalRevenueInr) * 100).toFixed(1)
+    : null;
 
   return (
     <div className="space-y-6">
-      <div className="flex items-end justify-between">
+      <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold text-slate-900">Dashboard</h1>
-          <p className="text-sm text-slate-500">Quick view of the cost-sheet system.</p>
+          <p className="text-sm text-slate-500">Live view across all quotes.</p>
         </div>
         <Link href="/quotes/new" className="btn-primary">+ New Quote</Link>
       </div>
 
       <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-        {stat("Quotes", String(d.quotes.length))}
-        {stat("Products in master", String(d.productCount))}
-        {stat("Total Revenue (all quotes)", fmtCurrency(d.totalRevenueInr))}
-        {stat(
-          "Profit before Admin",
-          fmtCurrency(d.totalProfitInr),
-          d.totalRevenueInr > 0
-            ? `${((d.totalProfitInr / d.totalRevenueInr) * 100).toFixed(1)}% of revenue`
-            : undefined,
-        )}
+        <div className="card">
+          <div className="flex items-start justify-between">
+            <div className="text-xs font-medium uppercase tracking-wide text-slate-500">Total Quotes</div>
+            <span className="text-lg">📋</span>
+          </div>
+          <div className="mt-2 text-3xl font-bold text-slate-900">{d.quotes.length}</div>
+          <Link href="/quotes" className="mt-1 block text-xs text-emerald-700 hover:underline">View all →</Link>
+        </div>
+        <div className="card">
+          <div className="flex items-start justify-between">
+            <div className="text-xs font-medium uppercase tracking-wide text-slate-500">Products</div>
+            <span className="text-lg">📦</span>
+          </div>
+          <div className="mt-2 text-3xl font-bold text-slate-900">{d.productCount}</div>
+          <Link href="/products" className="mt-1 block text-xs text-emerald-700 hover:underline">Manage →</Link>
+        </div>
+        <div className="card">
+          <div className="flex items-start justify-between">
+            <div className="text-xs font-medium uppercase tracking-wide text-slate-500">Total Revenue</div>
+            <span className="text-lg">💰</span>
+          </div>
+          <div className="mt-2 text-2xl font-bold text-slate-900">{fmtCurrency(d.totalRevenueInr)}</div>
+          <div className="mt-1 text-xs text-slate-500">across all quotes</div>
+        </div>
+        <div className="card">
+          <div className="flex items-start justify-between">
+            <div className="text-xs font-medium uppercase tracking-wide text-slate-500">Profit before Admin</div>
+            <span className="text-lg">{d.totalProfitInr >= 0 ? "📈" : "📉"}</span>
+          </div>
+          <div className={`mt-2 text-2xl font-bold ${d.totalProfitInr >= 0 ? "text-emerald-700" : "text-rose-700"}`}>
+            {fmtCurrency(d.totalProfitInr)}
+          </div>
+          {profitPct && (
+            <div className={`mt-1 text-xs font-medium ${d.totalProfitInr >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
+              {d.totalProfitInr >= 0 ? "+" : ""}{profitPct}% margin
+            </div>
+          )}
+        </div>
       </div>
 
       <DashboardCharts monthlyData={monthlyData} topCustomers={topCustomers} statusData={statusData} />
@@ -177,27 +201,24 @@ export default async function Dashboard() {
                 <th>Status</th>
                 <th>FX</th>
                 <th>Created</th>
-                <th></th>
               </tr>
             </thead>
             <tbody>
               {d.quotes.slice(0, 10).map((q) => (
-                <tr key={q.id}>
-                  <td className="text-left">{q.poNo || <span className="text-slate-400">—</span>}</td>
-                  <td className="text-left">{q.customer || "—"}</td>
-                  <td className="text-left">{q.country || "—"}</td>
-                  <td className="text-left">
+                <tr key={q.id} className="relative cursor-pointer hover:bg-slate-50">
+                  <td className="text-left font-medium">
+                    <Link href={`/quotes/${q.id}`} className="absolute inset-0" aria-label={q.poNo ?? "Open quote"} />
+                    <span className="relative">{q.poNo || <span className="text-slate-400 font-normal">—</span>}</span>
+                  </td>
+                  <td className="relative text-left">{q.customer || <span className="text-slate-400">—</span>}</td>
+                  <td className="relative text-left text-slate-500">{q.country || "—"}</td>
+                  <td className="relative text-left">
                     <span className={`rounded px-1.5 py-0.5 text-xs font-semibold ${STATUS_COLORS[q.status] ?? "bg-slate-100 text-slate-700"}`}>
                       {q.status}
                     </span>
                   </td>
-                  <td>{q.fxRate.toFixed(4)}</td>
-                  <td>{q.createdAt.toLocaleDateString("en-IN")}</td>
-                  <td>
-                    <Link href={`/quotes/${q.id}`} className="text-emerald-700 hover:underline">
-                      Open
-                    </Link>
-                  </td>
+                  <td className="relative text-slate-500">{q.fxRate.toFixed(2)}</td>
+                  <td className="relative text-slate-400">{q.createdAt.toLocaleDateString("en-IN")}</td>
                 </tr>
               ))}
             </tbody>

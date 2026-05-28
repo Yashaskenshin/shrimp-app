@@ -1,14 +1,17 @@
 import { prisma } from "@/lib/db";
 import { AssumptionsForm } from "./AssumptionsForm";
 import { PlantsCard } from "./PlantsCard";
+import { ProcessingRatesCard } from "./ProcessingRatesCard";
 
 export const dynamic = "force-dynamic";
 
 export default async function AssumptionsPage() {
-  const [rows, plants] = await Promise.all([
+  const [rows, plants, rates] = await Promise.all([
     prisma.assumption.findMany({ orderBy: [{ group: "asc" }, { label: "asc" }] }),
     prisma.plant.findMany({ orderBy: [{ active: "desc" }, { name: "asc" }] }),
+    prisma.processingChargeRate.findMany({ orderBy: [{ plant: "asc" }, { product: "asc" }] }),
   ]);
+
   return (
     <div className="space-y-4">
       <div>
@@ -22,6 +25,15 @@ export default async function AssumptionsPage() {
         plants={plants.map((p) => ({ id: p.id, name: p.name, active: p.active }))}
       />
       <AssumptionsForm rows={rows.map((r) => ({ id: r.id, key: r.key, label: r.label, value: r.value, unit: r.unit, group: r.group, notes: r.notes }))} />
+      <ProcessingRatesCard
+        rates={rates.map((r) => ({
+          plant: r.plant,
+          product: r.product,
+          freezeType: r.freezeType,
+          packSize: r.packSize,
+          rsPerKg: r.rsPerKg,
+        }))}
+      />
     </div>
   );
 }
