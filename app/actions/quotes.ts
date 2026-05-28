@@ -257,8 +257,8 @@ export async function transitionQuote(
     const activeLines = q.lines.filter((l) => l.weightKg > 0);
     const issues: string[] = [];
     for (const l of activeLines) {
-      if ((l.yieldPctOverride ?? 0.63) <= 0) {
-        issues.push(`Line ${l.lineNo}: yield is 0`);
+      if (l.yieldPctOverride == null || l.yieldPctOverride <= 0) {
+        issues.push(`Line ${l.lineNo}: yield is not set`);
       }
       if ((l.rmPriceRs ?? 0) <= 0) {
         issues.push(`Line ${l.lineNo}: RM price is 0`);
