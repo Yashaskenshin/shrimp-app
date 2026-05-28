@@ -14,12 +14,52 @@ const STATUS_COLORS: Record<string, string> = {
 
 const STATUSES = ["DRAFT", "SUBMITTED", "VERIFIED", "APPROVED", "REJECTED", "SENT"];
 
+const SORT_FIELDS: Record<string, object> = {
+  poNo:      { poNo: "asc" },
+  poNoDesc:  { poNo: "desc" },
+  customer:  { customer: "asc" },
+  customerDesc: { customer: "desc" },
+  status:    { status: "asc" },
+  statusDesc: { status: "desc" },
+  updatedAt: { updatedAt: "asc" },
+  updatedAtDesc: { updatedAt: "desc" },
+};
+
+function buildSortHref(col: string, currentSort: string | undefined, currentDir: string | undefined, q?: string, status?: string) {
+  const isActive = currentSort === col;
+  const nextDir = isActive && currentDir !== "desc" ? "desc" : "asc";
+  const params = new URLSearchParams();
+  if (q) params.set("q", q);
+  if (status) params.set("status", status);
+  params.set("sort", col);
+  params.set("dir", nextDir);
+  return { href: `/quotes?${params.toString()}`, isActive, dir: isActive ? (currentDir !== "desc" ? "asc" : "desc") : null };
+}
+
+function SortTh({ col, label, sort, dir, q, status }: {
+  col: string; label: string;
+  sort?: string; dir?: string; q?: string; status?: string;
+}) {
+  const s = buildSortHref(col, sort, dir, q, status);
+  return (
+    <th>
+      <Link
+        href={s.href}
+        className={`inline-flex items-center gap-1 hover:text-slate-900 ${s.isActive ? "font-semibold text-slate-900" : "text-slate-500"}`}
+      >
+        {label}
+        {s.isActive && <span className="text-[10px]">{s.dir === "desc" ? "↓" : "↑"}</span>}
+      </Link>
+    </th>
+  );
+}
+
 export default async function QuotesList({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; status?: string }>;
+  searchParams: Promise<{ q?: string; status?: string; sort?: string; dir?: string }>;
 }) {
-  const { q, status } = await searchParams;
+  const { q, status, sort, dir } = await searchParams;
 
   const where = {
     ...(q?.trim()
@@ -33,9 +73,12 @@ export default async function QuotesList({
     ...(status && STATUSES.includes(status) ? { status: status as never } : {}),
   };
 
+  const sortKey = sort && dir ? `${sort}${dir === "desc" ? "Desc" : ""}` : "";
+  const orderBy = SORT_FIELDS[sortKey] ?? { createdAt: "desc" };
+
   const quotes = await prisma.quote.findMany({
     where,
-    orderBy: { createdAt: "desc" },
+    orderBy,
     include: {
       _count: { select: { lines: true } },
       lines: { select: { weightKg: true, usdPerKg: true } },
@@ -90,15 +133,14 @@ export default async function QuotesList({
         ) : (
           <table className="calc w-full text-sm">
             <thead>
-              <tr className="text-left text-slate-500">
-                <th>PO</th>
-                <th>Customer</th>
-                <th>Country</th>
-                <th>Status</th>
-                <th className="text-right">FX</th>
-                <th className="text-right">Rev USD&apos;000</th>
-                <th className="text-right">Lines</th>
-                <th>Updated</th>
+              <tr className="text-left">
+                <SortTh col="poNo" label="PO" sort={sort} dir={dir} q={q} status={status} />
+                <SortTh col="customer" label="Customer" sort={sort} dir={dir} q={q} status={status} />
+                <SortTh col="status" label="Status" sort={sort} dir={dir} q={q} status={status} />
+                <th className="text-right text-slate-500">FX</th>
+                <th className="text-right text-slate-500">Rev USD&apos;000</th>
+                <th className="text-right text-slate-500">Lines</th>
+                <SortTh col="updatedAt" label="Updated" sort={sort} dir={dir} q={q} status={status} />
                 <th></th>
               </tr>
             </thead>
@@ -109,13 +151,12 @@ export default async function QuotesList({
                   <tr key={q.id}>
                     <td className="text-left font-medium">{q.poNo || <span className="text-slate-400">—</span>}</td>
                     <td className="text-left">{q.customer || "—"}</td>
-                    <td className="text-left">{q.country || "—"}</td>
                     <td className="text-left">
                       <span className={`rounded px-2 py-0.5 text-xs font-medium ${STATUS_COLORS[q.status] ?? "bg-slate-100 text-slate-600"}`}>
                         {q.status}
                       </span>
                     </td>
-                    <td className="tabular-nums">{q.fxRate.toFixed(2)}</td>
+                    <td className="tabular-nums text-right">{q.fxRate.toFixed(2)}</td>
                     <td className="tabular-nums text-right">
                       {revUsd > 0
                         ? new Intl.NumberFormat("en-IN", { maximumFractionDigits: 1 }).format(revUsd)

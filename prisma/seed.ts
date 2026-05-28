@@ -36,6 +36,7 @@ const ASSUMPTIONS = [
   { key: "wages_per_kg",             label: "Wages & salaries",           value: 4.9632,   unit: "Rs/kg", group: "fixed" },
   { key: "rental_per_kg",            label: "Rental / Insurance / Other", value: 0,        unit: "Rs/kg", group: "fixed" },
   { key: "depreciation_per_kg",      label: "Depreciation",               value: 0.1141,   unit: "Rs/kg", group: "fixed" },
+  { key: "default_fx_rate",          label: "Default USD/INR rate (new quotes)", value: 83,  unit: "Rs/$",  group: "factor" },
 ];
 
 // Look for the workbook — checks project root first (committed to repo),

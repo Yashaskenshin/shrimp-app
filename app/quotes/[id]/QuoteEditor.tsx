@@ -132,6 +132,13 @@ interface Props {
   processingRates: ProcessingChargeRow[];
   /** Active plant names for the Plant dropdown. */
   plantOptions: string[];
+  /** Distinct values from existing quotes for datalist autocomplete. */
+  autocomplete: {
+    customers: string[];
+    portsLoading: string[];
+    portsDest: string[];
+    countries: string[];
+  };
 }
 
 const MAX_LINES = 12;
@@ -254,6 +261,9 @@ export function QuoteEditor(props: Props) {
     setCustomFixUI((cf) => resizeCustomValues(cf, rows.length));
   }, [rows.length]);
 
+  // Ctrl+S / Cmd+S shortcut — always calls latest handleSave via ref
+  const handleSaveRef = useRef<() => void>(() => {});
+
   // Unsaved-changes tracking
   const [changed, setChanged] = useState(false);
   const isFirstRender = useRef(true);
@@ -268,6 +278,19 @@ export function QuoteEditor(props: Props) {
     window.addEventListener("beforeunload", handler);
     return () => window.removeEventListener("beforeunload", handler);
   }, [changed]);
+
+  useEffect(() => { handleSaveRef.current = handleSave; });
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if ((e.ctrlKey || e.metaKey) && e.key === "s") {
+        e.preventDefault();
+        handleSaveRef.current();
+      }
+    }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const calcInput = useMemo(() => {
     const customVariableCosts = persistCustom(customVarUI, rows);
@@ -506,10 +529,11 @@ export function QuoteEditor(props: Props) {
 
   async function performSave(opts: { silent?: boolean } = {}): Promise<boolean> {
     try {
-      await saveQuote(buildPayload());
+      const res = await saveQuote(buildPayload());
       setChanged(false);
       if (!opts.silent) {
-        toast.success("Saved");
+        if (res.warning) toast.info(res.warning);
+        else toast.success("Saved");
         router.refresh();
       }
       return true;
@@ -671,17 +695,25 @@ export function QuoteEditor(props: Props) {
         </Field>
         <Field label="Customer">
           <input
+            list="ac-customers"
             className="input"
             value={header.customer ?? ""}
             onChange={(e) => setHeader({ ...header, customer: e.target.value || null })}
           />
+          <datalist id="ac-customers">
+            {props.autocomplete.customers.map((c) => <option key={c} value={c} />)}
+          </datalist>
         </Field>
         <Field label="Country">
           <input
+            list="ac-countries"
             className="input"
             value={header.country ?? ""}
             onChange={(e) => setHeader({ ...header, country: e.target.value || null })}
           />
+          <datalist id="ac-countries">
+            {props.autocomplete.countries.map((c) => <option key={c} value={c} />)}
+          </datalist>
         </Field>
         <Field label="Plant">
           <select
@@ -768,10 +800,16 @@ export function QuoteEditor(props: Props) {
         </Field>
         <Field label="Payment">
           <input
+            list="ac-payment"
             className="input"
             value={header.payment ?? ""}
             onChange={(e) => setHeader({ ...header, payment: e.target.value || null })}
           />
+          <datalist id="ac-payment">
+            {["T/T Advance", "T/T 30 days", "T/T 60 days", "T/T 90 days", "L/C at sight", "L/C 30 days", "L/C 60 days", "L/C 90 days", "D/A 60 days", "D/P at sight", "CAD"].map((t) => (
+              <option key={t} value={t} />
+            ))}
+          </datalist>
         </Field>
         <Field label="USD / INR">
           <input
@@ -800,10 +838,14 @@ export function QuoteEditor(props: Props) {
         </Field>
         <Field label="Port of loading">
           <input
+            list="ac-port-loading"
             className="input"
             value={header.portLoading ?? ""}
             onChange={(e) => setHeader({ ...header, portLoading: e.target.value || null })}
           />
+          <datalist id="ac-port-loading">
+            {props.autocomplete.portsLoading.map((p) => <option key={p} value={p} />)}
+          </datalist>
         </Field>
         <Field label="Port loading date">
           <input
@@ -815,10 +857,14 @@ export function QuoteEditor(props: Props) {
         </Field>
         <Field label="Port of destination">
           <input
+            list="ac-port-dest"
             className="input"
             value={header.portDestination ?? ""}
             onChange={(e) => setHeader({ ...header, portDestination: e.target.value || null })}
           />
+          <datalist id="ac-port-dest">
+            {props.autocomplete.portsDest.map((p) => <option key={p} value={p} />)}
+          </datalist>
         </Field>
         <Field label="Port dest. date">
           <input

@@ -3,20 +3,16 @@ import { lookupProcessingChargeVar, type ProcessingChargeRow } from "./processin
 const table: ProcessingChargeRow[] = [
   {
     plant: "NELO",
-    productG: "HO",
     product: "HOSO",
     freezeType: "Block",
     packSize: "1.8Kg/2.0Kg",
-    countSize: "All size",
     rsPerKg: 45,
   },
   {
     plant: "NELO",
-    productG: "PD",
     product: "PDTO",
     freezeType: "Block",
     packSize: "1.8Kg/2.0Kg/4Lbs",
-    countSize: "All size",
     rsPerKg: 53,
   },
 ];
