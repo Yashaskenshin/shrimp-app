@@ -183,7 +183,9 @@ export function ExcelCostFlowTable({
             <td className={`${stickyLabel} bg-white font-medium`}>Yield</td>
             {rows.map((r) => (
               <td key={r.lineNo} className="bg-white px-2 py-1.5 text-right tabular-nums">
-                {`${((r.yieldPctOverride ?? 0.63) * 100).toFixed(1)}%`}
+                {r.yieldPctOverride != null && r.yieldPctOverride > 0
+                  ? `${(r.yieldPctOverride * 100).toFixed(1)}%`
+                  : <span className="text-amber-600">not set</span>}
               </td>
             ))}
             <td className="bg-slate-50 px-2 py-1.5 text-right text-slate-400">—</td>

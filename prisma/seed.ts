@@ -168,6 +168,19 @@ async function main() {
       })),
     });
     console.log(`  ${pcRows.length} processing-charge rates imported.`);
+
+    // Seed Plant master from the distinct plant values on the processing sheet.
+    const plantNames = Array.from(
+      new Set(pcRows.map((p) => p.plant.trim()).filter(Boolean)),
+    );
+    for (const name of plantNames) {
+      await prisma.plant.upsert({
+        where: { name },
+        create: { name },
+        update: {}, // preserve user-toggled active flag
+      });
+    }
+    console.log(`  ${plantNames.length} plants OK.`);
   }
   let imported = 0;
   for (const m of master) {

@@ -43,7 +43,9 @@ export function mapQuoteLineToLineInput(l: QuoteLineComputeLike): LineInput {
     weightKg: l.weightKg,
     usdPerKg: l.usdPerKg,
     stockFgKg: l.stockFgKg ?? undefined,
-    yieldPct: l.yieldPctOverride ?? 0.63,
+    // null/missing yield → 0 so kernel skips RM/harvesting (safeDiv) and
+    // numbers don't silently calculate against a guessed 63%.
+    yieldPct: l.yieldPctOverride ?? 0,
     avgSize: l.avgSizeOverride ?? 0,
     rmPriceRs: l.rmPriceRs ?? 0,
     packagingRs: l.packagingRs ?? undefined,

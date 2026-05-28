@@ -130,6 +130,8 @@ interface Props {
   customFixedCosts: CustomCostRow[];
   /** From DB / seed — used to auto-fill variable processing Rs/kg (Excel connector). */
   processingRates: ProcessingChargeRow[];
+  /** Active plant names for the Plant dropdown. */
+  plantOptions: string[];
 }
 
 const MAX_LINES = 12;
@@ -331,7 +333,7 @@ export function QuoteEditor(props: Props) {
       const isActive = r.weightKg > 0 || r.usdPerKg > 0;
       if (!isActive) continue;
       const warns: string[] = [];
-      if ((r.yieldPctOverride ?? 0.63) <= 0) warns.push("Yield is 0 — RM cost omitted");
+      if (r.yieldPctOverride == null || r.yieldPctOverride <= 0) warns.push("Yield is not set");
       if ((r.rmPriceRs ?? 0) <= 0) warns.push("RM price is 0");
       const calcLine = calcInput.lines.find((l) => l.lineNo === r.lineNo);
       if (
@@ -381,7 +383,9 @@ export function QuoteEditor(props: Props) {
               productName: p.name,
               sizeBand: p.sizeBand,
               pack: r.pack || derivedPack || null,
-              yieldPctOverride: p.stdYieldPct ?? 0.63,
+              // Use master yield when set; otherwise leave null so warning fires
+              // and user has to enter a real value before Submit/Approve.
+              yieldPctOverride: p.stdYieldPct ?? null,
               avgSizeOverride: p.rmAvgSize ?? 0,
             }
           : r,
@@ -680,15 +684,22 @@ export function QuoteEditor(props: Props) {
           />
         </Field>
         <Field label="Plant">
-          <input
+          <select
             className="input"
             value={header.plant ?? ""}
             onChange={(e) => setHeader({ ...header, plant: e.target.value || null })}
-          />
+          >
+            <option value="">— select plant —</option>
+            {/* Show the current value even if it's no longer in the active list */}
+            {header.plant && !props.plantOptions.includes(header.plant) && (
+              <option value={header.plant}>{header.plant} (inactive)</option>
+            )}
+            {props.plantOptions.map((name) => (
+              <option key={name} value={name}>{name}</option>
+            ))}
+          </select>
           <p className="mt-0.5 text-[11px] leading-snug text-slate-500">
-            Same value as the Excel &quot;Processing charge&quot; sheet (e.g.{" "}
-            <span className="font-medium text-slate-600">NELO</span>) — needed for variable
-            processing Rs/kg to auto-fill.
+            Manage the list in <a href="/assumptions" className="text-emerald-700 hover:underline">Assumptions → Processing plants</a>. Required for variable processing Rs/kg auto-fill.
           </p>
         </Field>
         <Field label="Freeze type (processing sheet)">
@@ -850,15 +861,6 @@ export function QuoteEditor(props: Props) {
         </div>
       </div>}
 
-      <div className="card">
-        <h2 className="mb-4 text-base font-semibold">What-if (live, not saved)</h2>
-        <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
-          <Slider label="Selling USD/kg" value={whatIfUsd} setValue={setWhatIfUsd} />
-          <Slider label="RM Price (Rs/kg)" value={whatIfRm} setValue={setWhatIfRm} />
-          <Slider label="USD/INR Rate" value={whatIfFx} setValue={setWhatIfFx} />
-        </div>
-      </div>
-
       {/* Sell information */}
       <div className="card">
         {totalWarnings > 0 && (
@@ -911,7 +913,7 @@ export function QuoteEditor(props: Props) {
             </thead>
             <tbody>
               {rows.map((r, i) => {
-                const yPct = (r.yieldPctOverride ?? 0.63) * 100;
+                const yPct = r.yieldPctOverride != null ? r.yieldPctOverride * 100 : 0;
                 const warns = lineWarnings[r.lineNo];
                 const history = r.productCode ? priceHistoryCache[r.productCode] : undefined;
                 const lastQuote = history?.[0];
@@ -1082,6 +1084,16 @@ export function QuoteEditor(props: Props) {
       </div>
 
       <div className="card">
+        <h2 className="mb-1 text-base font-semibold">What-if scenarios <span className="ml-1 text-xs font-normal text-slate-500">(live preview, not saved)</span></h2>
+        <p className="mb-4 text-xs text-slate-500">Drag a slider to see how the totals above shift. Reset returns to 0%.</p>
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+          <Slider label="Selling USD/kg" value={whatIfUsd} setValue={setWhatIfUsd} />
+          <Slider label="RM Price (Rs/kg)" value={whatIfRm} setValue={setWhatIfRm} />
+          <Slider label="USD/INR Rate" value={whatIfFx} setValue={setWhatIfFx} />
+        </div>
+      </div>
+
+      <div className="card">
         <button
           type="button"
           className="flex w-full items-center justify-between text-left"
@@ -1236,13 +1248,22 @@ function ProductCombobox({
   const [open, setOpen] = useState(false);
   const wrapperRef = useRef<HTMLDivElement>(null);
 
-  const filtered = useMemo(() => {
-    if (!query.trim()) return products.slice(0, 40);
-    const q = query.toLowerCase();
-    return products
-      .filter((p) => p.code.toLowerCase().includes(q) || p.name.toLowerCase().includes(q))
-      .slice(0, 40);
+  const grouped = useMemo(() => {
+    const pool = query.trim()
+      ? products.filter((p) => {
+          const q = query.toLowerCase();
+          return p.code.toLowerCase().includes(q) || p.name.toLowerCase().includes(q);
+        })
+      : products;
+    return groupProductsByCategory(pool);
   }, [products, query]);
+
+  const totalCount = useMemo(
+    () => grouped.reduce((s, g) => s + g.items.length, 0),
+    [grouped],
+  );
+
+  const firstMatch = grouped[0]?.items[0];
 
   useEffect(() => {
     if (!open) return;
@@ -1269,8 +1290,8 @@ function ProductCombobox({
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === "Escape") { setOpen(false); setQuery(""); }
-            if (e.key === "Enter" && filtered.length > 0) {
-              onChange(filtered[0].code);
+            if (e.key === "Enter" && firstMatch) {
+              onChange(firstMatch.code);
               setOpen(false);
               setQuery("");
             }
@@ -1293,34 +1314,45 @@ function ProductCombobox({
         </button>
       )}
       {open && (
-        <ul className="absolute left-0 z-20 mt-1 max-h-56 w-80 overflow-auto rounded-md border border-slate-200 bg-white text-sm shadow-lg">
-          {value && (
-            <li>
+        <div className="absolute left-0 z-20 mt-1 max-h-[26rem] w-[28rem] overflow-auto rounded-md border border-slate-200 bg-white text-sm shadow-lg">
+          <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-100 bg-slate-50 px-3 py-1.5 text-[11px] text-slate-500">
+            <span>{totalCount} match{totalCount === 1 ? "" : "es"}</span>
+            {value && (
               <button
                 type="button"
-                className="w-full px-3 py-1.5 text-left text-xs text-slate-400 hover:bg-slate-50"
+                className="text-rose-700 hover:underline"
                 onMouseDown={() => { onChange(""); setOpen(false); setQuery(""); }}
               >
-                — clear —
+                clear selection
               </button>
-            </li>
+            )}
+          </div>
+          {totalCount === 0 && (
+            <p className="px-3 py-4 text-center text-slate-400">No matches</p>
           )}
-          {filtered.length === 0 && (
-            <li className="px-3 py-2 text-slate-400">No matches</li>
-          )}
-          {filtered.map((p) => (
-            <li key={p.code}>
-              <button
-                type="button"
-                className="w-full px-3 py-2 text-left hover:bg-emerald-50"
-                onMouseDown={() => { onChange(p.code); setOpen(false); setQuery(""); }}
-              >
-                <span className="mr-1 font-mono text-xs text-slate-400">{p.code}</span>
-                {p.name}
-              </button>
-            </li>
+          {grouped.map((g) => (
+            <div key={g.category}>
+              <div className="sticky top-7 z-[5] bg-emerald-50/95 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-emerald-800">
+                {g.category}
+                <span className="ml-2 font-normal text-emerald-700/70">{g.items.length}</span>
+              </div>
+              <ul>
+                {g.items.map((p) => (
+                  <li key={p.code}>
+                    <button
+                      type="button"
+                      className={`flex w-full items-start gap-2 px-3 py-1.5 text-left hover:bg-emerald-50 ${p.code === value ? "bg-emerald-100" : ""}`}
+                      onMouseDown={() => { onChange(p.code); setOpen(false); setQuery(""); }}
+                    >
+                      <span className="shrink-0 font-mono text-[11px] text-slate-400">{p.code}</span>
+                      <span className="min-w-0 flex-1 truncate">{p.name}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
           ))}
-        </ul>
+        </div>
       )}
     </div>
   );

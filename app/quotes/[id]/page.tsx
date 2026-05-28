@@ -19,13 +19,18 @@ export default async function QuotePage(
   });
   if (!quote) notFound();
 
-  const [products, assumptions, processingRates] = await Promise.all([
+  const [products, assumptions, processingRates, plants] = await Promise.all([
     prisma.product.findMany({
       where: { active: true },
       orderBy: { code: "asc" },
     }),
     loadAssumptions(),
     prisma.processingChargeRate.findMany(),
+    prisma.plant.findMany({
+      where: { active: true },
+      orderBy: { name: "asc" },
+      select: { name: true },
+    }),
   ]);
 
   const processingRatesProps = processingRates.map((r) => ({
@@ -102,6 +107,7 @@ export default async function QuotePage(
       customVariableCosts={parseCustomCosts(quote.customVariableCosts)}
       customFixedCosts={parseCustomCosts(quote.customFixedCosts)}
       processingRates={processingRatesProps}
+      plantOptions={plants.map((p) => p.name)}
     />
   );
 }
