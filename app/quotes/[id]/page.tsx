@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { loadAssumptions } from "@/lib/assumptions";
 import { parseCustomCosts } from "@/lib/customCosts";
+import { getQuoteAutocomplete } from "@/app/actions/quotes";
 import { QuoteEditor } from "./QuoteEditor";
 
 export const dynamic = "force-dynamic";
@@ -19,7 +20,7 @@ export default async function QuotePage(
   });
   if (!quote) notFound();
 
-  const [products, assumptions, processingRates, plants] = await Promise.all([
+  const [products, assumptions, processingRates, plants, autocomplete] = await Promise.all([
     prisma.product.findMany({
       where: { active: true },
       orderBy: { code: "asc" },
@@ -31,6 +32,7 @@ export default async function QuotePage(
       orderBy: { name: "asc" },
       select: { name: true },
     }),
+    getQuoteAutocomplete(),
   ]);
 
   const processingRatesProps = processingRates.map((r) => ({
@@ -108,6 +110,7 @@ export default async function QuotePage(
       customFixedCosts={parseCustomCosts(quote.customFixedCosts)}
       processingRates={processingRatesProps}
       plantOptions={plants.map((p) => p.name)}
+      autocomplete={autocomplete}
     />
   );
 }

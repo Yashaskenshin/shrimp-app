@@ -132,6 +132,13 @@ interface Props {
   processingRates: ProcessingChargeRow[];
   /** Active plant names for the Plant dropdown. */
   plantOptions: string[];
+  /** Distinct values from existing quotes for datalist autocomplete. */
+  autocomplete: {
+    customers: string[];
+    portsLoading: string[];
+    portsDest: string[];
+    countries: string[];
+  };
 }
 
 const MAX_LINES = 12;
@@ -254,6 +261,9 @@ export function QuoteEditor(props: Props) {
     setCustomFixUI((cf) => resizeCustomValues(cf, rows.length));
   }, [rows.length]);
 
+  // Ctrl+S / Cmd+S shortcut — always calls latest handleSave via ref
+  const handleSaveRef = useRef<() => void>(() => {});
+
   // Unsaved-changes tracking
   const [changed, setChanged] = useState(false);
   const isFirstRender = useRef(true);
@@ -268,6 +278,19 @@ export function QuoteEditor(props: Props) {
     window.addEventListener("beforeunload", handler);
     return () => window.removeEventListener("beforeunload", handler);
   }, [changed]);
+
+  useEffect(() => { handleSaveRef.current = handleSave; });
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if ((e.ctrlKey || e.metaKey) && e.key === "s") {
+        e.preventDefault();
+        handleSaveRef.current();
+      }
+    }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const calcInput = useMemo(() => {
     const customVariableCosts = persistCustom(customVarUI, rows);
@@ -506,10 +529,11 @@ export function QuoteEditor(props: Props) {
 
   async function performSave(opts: { silent?: boolean } = {}): Promise<boolean> {
     try {
-      await saveQuote(buildPayload());
+      const res = await saveQuote(buildPayload());
       setChanged(false);
       if (!opts.silent) {
-        toast.success("Saved");
+        if (res.warning) toast.info(res.warning);
+        else toast.success("Saved");
         router.refresh();
       }
       return true;
@@ -671,17 +695,25 @@ export function QuoteEditor(props: Props) {
         </Field>
         <Field label="Customer">
           <input
+            list="ac-customers"
             className="input"
             value={header.customer ?? ""}
             onChange={(e) => setHeader({ ...header, customer: e.target.value || null })}
           />
+          <datalist id="ac-customers">
+            {props.autocomplete.customers.map((c) => <option key={c} value={c} />)}
+          </datalist>
         </Field>
         <Field label="Country">
           <input
+            list="ac-countries"
             className="input"
             value={header.country ?? ""}
             onChange={(e) => setHeader({ ...header, country: e.target.value || null })}
           />
+          <datalist id="ac-countries">
+            {props.autocomplete.countries.map((c) => <option key={c} value={c} />)}
+          </datalist>
         </Field>
         <Field label="Plant">
           <select
@@ -768,10 +800,16 @@ export function QuoteEditor(props: Props) {
         </Field>
         <Field label="Payment">
           <input
+            list="ac-payment"
             className="input"
             value={header.payment ?? ""}
             onChange={(e) => setHeader({ ...header, payment: e.target.value || null })}
           />
+          <datalist id="ac-payment">
+            {["T/T Advance", "T/T 30 days", "T/T 60 days", "T/T 90 days", "L/C at sight", "L/C 30 days", "L/C 60 days", "L/C 90 days", "D/A 60 days", "D/P at sight", "CAD"].map((t) => (
+              <option key={t} value={t} />
+            ))}
+          </datalist>
         </Field>
         <Field label="USD / INR">
           <input
@@ -800,10 +838,14 @@ export function QuoteEditor(props: Props) {
         </Field>
         <Field label="Port of loading">
           <input
+            list="ac-port-loading"
             className="input"
             value={header.portLoading ?? ""}
             onChange={(e) => setHeader({ ...header, portLoading: e.target.value || null })}
           />
+          <datalist id="ac-port-loading">
+            {props.autocomplete.portsLoading.map((p) => <option key={p} value={p} />)}
+          </datalist>
         </Field>
         <Field label="Port loading date">
           <input
@@ -815,10 +857,14 @@ export function QuoteEditor(props: Props) {
         </Field>
         <Field label="Port of destination">
           <input
+            list="ac-port-dest"
             className="input"
             value={header.portDestination ?? ""}
             onChange={(e) => setHeader({ ...header, portDestination: e.target.value || null })}
           />
+          <datalist id="ac-port-dest">
+            {props.autocomplete.portsDest.map((p) => <option key={p} value={p} />)}
+          </datalist>
         </Field>
         <Field label="Port dest. date">
           <input
@@ -1246,7 +1292,9 @@ function ProductCombobox({
 }) {
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
+  const [cursor, setCursor] = useState(0);
   const wrapperRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
 
   const grouped = useMemo(() => {
     const pool = query.trim()
@@ -1258,12 +1306,11 @@ function ProductCombobox({
     return groupProductsByCategory(pool);
   }, [products, query]);
 
-  const totalCount = useMemo(
-    () => grouped.reduce((s, g) => s + g.items.length, 0),
-    [grouped],
-  );
+  // Flat list for keyboard navigation
+  const flat = useMemo(() => grouped.flatMap((g) => g.items), [grouped]);
+  const totalCount = flat.length;
 
-  const firstMatch = grouped[0]?.items[0];
+  useEffect(() => { setCursor(0); }, [query]);
 
   useEffect(() => {
     if (!open) return;
@@ -1277,6 +1324,28 @@ function ProductCombobox({
     return () => document.removeEventListener("mousedown", handler);
   }, [open]);
 
+  // Scroll cursor item into view
+  useEffect(() => {
+    if (!open || !listRef.current) return;
+    const el = listRef.current.querySelector(`[data-cursor="true"]`);
+    el?.scrollIntoView({ block: "nearest" });
+  }, [cursor, open]);
+
+  function selectAt(idx: number) {
+    const p = flat[idx];
+    if (!p) return;
+    onChange(p.code);
+    setOpen(false);
+    setQuery("");
+  }
+
+  function handleKeyDown(e: React.KeyboardEvent) {
+    if (e.key === "Escape") { setOpen(false); setQuery(""); return; }
+    if (e.key === "ArrowDown") { e.preventDefault(); setCursor((c) => Math.min(c + 1, totalCount - 1)); return; }
+    if (e.key === "ArrowUp") { e.preventDefault(); setCursor((c) => Math.max(c - 1, 0)); return; }
+    if (e.key === "Enter") { e.preventDefault(); selectAt(cursor); return; }
+  }
+
   const selected = products.find((p) => p.code === value);
 
   return (
@@ -1285,17 +1354,10 @@ function ProductCombobox({
         <input
           autoFocus
           className="input"
-          placeholder="Type code or name…"
+          placeholder="Type code or name… (↑↓ to navigate)"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Escape") { setOpen(false); setQuery(""); }
-            if (e.key === "Enter" && firstMatch) {
-              onChange(firstMatch.code);
-              setOpen(false);
-              setQuery("");
-            }
-          }}
+          onKeyDown={handleKeyDown}
         />
       ) : (
         <button
@@ -1314,7 +1376,7 @@ function ProductCombobox({
         </button>
       )}
       {open && (
-        <div className="absolute left-0 z-20 mt-1 max-h-[26rem] w-[28rem] overflow-auto rounded-md border border-slate-200 bg-white text-sm shadow-lg">
+        <div ref={listRef} className="absolute left-0 z-20 mt-1 max-h-[26rem] w-[28rem] overflow-auto rounded-md border border-slate-200 bg-white text-sm shadow-lg">
           <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-100 bg-slate-50 px-3 py-1.5 text-[11px] text-slate-500">
             <span>{totalCount} match{totalCount === 1 ? "" : "es"}</span>
             {value && (
@@ -1330,28 +1392,38 @@ function ProductCombobox({
           {totalCount === 0 && (
             <p className="px-3 py-4 text-center text-slate-400">No matches</p>
           )}
-          {grouped.map((g) => (
-            <div key={g.category}>
-              <div className="sticky top-7 z-[5] bg-emerald-50/95 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-emerald-800">
-                {g.category}
-                <span className="ml-2 font-normal text-emerald-700/70">{g.items.length}</span>
+          {(() => {
+            let flatIdx = 0;
+            return grouped.map((g) => (
+              <div key={g.category}>
+                <div className="sticky top-7 z-[5] bg-emerald-50/95 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-emerald-800">
+                  {g.category}
+                  <span className="ml-2 font-normal text-emerald-700/70">{g.items.length}</span>
+                </div>
+                <ul>
+                  {g.items.map((p) => {
+                    const idx = flatIdx++;
+                    const isCursor = idx === cursor;
+                    const isSelected = p.code === value;
+                    return (
+                      <li key={p.code}>
+                        <button
+                          type="button"
+                          data-cursor={isCursor ? "true" : undefined}
+                          className={`flex w-full items-start gap-2 px-3 py-1.5 text-left ${isCursor ? "bg-emerald-50 outline-none ring-1 ring-inset ring-emerald-400" : isSelected ? "bg-emerald-100" : "hover:bg-emerald-50"}`}
+                          onMouseEnter={() => setCursor(idx)}
+                          onMouseDown={() => { onChange(p.code); setOpen(false); setQuery(""); }}
+                        >
+                          <span className="shrink-0 font-mono text-[11px] text-slate-400">{p.code}</span>
+                          <span className="min-w-0 flex-1 truncate">{p.name}</span>
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
               </div>
-              <ul>
-                {g.items.map((p) => (
-                  <li key={p.code}>
-                    <button
-                      type="button"
-                      className={`flex w-full items-start gap-2 px-3 py-1.5 text-left hover:bg-emerald-50 ${p.code === value ? "bg-emerald-100" : ""}`}
-                      onMouseDown={() => { onChange(p.code); setOpen(false); setQuery(""); }}
-                    >
-                      <span className="shrink-0 font-mono text-[11px] text-slate-400">{p.code}</span>
-                      <span className="min-w-0 flex-1 truncate">{p.name}</span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ))}
+            ));
+          })()}
         </div>
       )}
     </div>

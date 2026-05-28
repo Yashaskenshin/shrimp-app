@@ -156,7 +156,18 @@ export async function saveQuote(payload: SaveQuotePayload) {
   revalidatePath(`/quotes/${id}`);
   revalidatePath("/quotes");
   revalidatePath("/");
-  return { ok: true };
+
+  let warning: string | undefined;
+  if (rest.poNo) {
+    const dup = await prisma.quote.findFirst({
+      where: { poNo: rest.poNo, id: { not: id } },
+      select: { customer: true, status: true },
+    });
+    if (dup) {
+      warning = `PO "${rest.poNo}" already exists on another quote (${dup.customer ?? "unknown"} · ${dup.status})`;
+    }
+  }
+  return { ok: true as const, warning };
 }
 
 export async function deleteQuote(id: string) {
@@ -332,4 +343,39 @@ export async function transitionQuote(
   revalidatePath("/quotes");
   revalidatePath("/");
   return { ok: true as const, status: nextStatus };
+}
+
+export async function getQuoteAutocomplete() {
+  const [customers, portsLoading, portsDest, countries] = await Promise.all([
+    prisma.quote.findMany({
+      where: { customer: { not: null } },
+      select: { customer: true },
+      distinct: ["customer"],
+      orderBy: { customer: "asc" },
+    }),
+    prisma.quote.findMany({
+      where: { portLoading: { not: null } },
+      select: { portLoading: true },
+      distinct: ["portLoading"],
+      orderBy: { portLoading: "asc" },
+    }),
+    prisma.quote.findMany({
+      where: { portDestination: { not: null } },
+      select: { portDestination: true },
+      distinct: ["portDestination"],
+      orderBy: { portDestination: "asc" },
+    }),
+    prisma.quote.findMany({
+      where: { country: { not: null } },
+      select: { country: true },
+      distinct: ["country"],
+      orderBy: { country: "asc" },
+    }),
+  ]);
+  return {
+    customers: customers.map((c) => c.customer!),
+    portsLoading: portsLoading.map((p) => p.portLoading!),
+    portsDest: portsDest.map((p) => p.portDestination!),
+    countries: countries.map((c) => c.country!),
+  };
 }

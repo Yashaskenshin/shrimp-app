@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { computeQuote, type Assumptions, DEFAULT_ASSUMPTIONS } from "@/lib/calc";
 import { parseCustomCosts } from "@/lib/customCosts";
 import { buildQuoteComputeInput } from "@/lib/quoteCompute";
+import { DashboardCharts } from "@/app/components/DashboardCharts";
 
 /** Avoid Prisma at static generation time — dashboard always reads live DB on request. */
 export const dynamic = "force-dynamic";
@@ -70,6 +71,9 @@ async function getDashboard() {
   let totalRevenueInr = 0;
   let totalProfitInr = 0;
   let totalKg = 0;
+  const monthlyRevenue: Record<string, number> = {};
+  const customerRevenue: Record<string, number> = {};
+
   for (const q of quotes) {
     byStatus[q.status] = (byStatus[q.status] ?? 0) + 1;
     const res = computeQuote(
@@ -86,16 +90,38 @@ async function getDashboard() {
         processingTable,
       }),
     );
-    totalRevenueInr += res.totals.revenueInr000 * 1000;
+    const revInr = res.totals.revenueInr000 * 1000;
+    totalRevenueInr += revInr;
     totalProfitInr += res.totals.profitBeforeAdmin000 * 1000;
     totalKg += res.totals.weightKg;
+
+    const monthKey = q.createdAt.toISOString().slice(0, 7);
+    monthlyRevenue[monthKey] = (monthlyRevenue[monthKey] ?? 0) + revInr;
+
+    const customer = q.customer ?? "(unknown)";
+    customerRevenue[customer] = (customerRevenue[customer] ?? 0) + revInr;
   }
 
-  return { quotes, byStatus, totalRevenueInr, totalProfitInr, totalKg, productCount };
+  return { quotes, byStatus, totalRevenueInr, totalProfitInr, totalKg, productCount, monthlyRevenue, customerRevenue };
 }
 
 export default async function Dashboard() {
   const d = await getDashboard();
+
+  const monthlyData = Object.entries(d.monthlyRevenue)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .slice(-12)
+    .map(([month, revenueInr]) => ({ month, revenueInr }));
+
+  const topCustomers = Object.entries(d.customerRevenue)
+    .sort(([, a], [, b]) => b - a)
+    .slice(0, 8)
+    .map(([customer, revenueInr]) => ({ customer, revenueInr }));
+
+  const STATUSES = ["DRAFT", "SUBMITTED", "VERIFIED", "APPROVED", "REJECTED", "SENT"];
+  const statusData = STATUSES
+    .map((status) => ({ status, count: d.byStatus[status] ?? 0 }))
+    .filter((s) => s.count > 0);
 
   const stat = (label: string, value: string, sub?: string) => (
     <div className="card flex-1">
@@ -128,17 +154,7 @@ export default async function Dashboard() {
         )}
       </div>
 
-      <div className="card">
-        <h2 className="mb-3 text-base font-semibold">By status</h2>
-        <div className="flex flex-wrap gap-3 text-sm">
-          {Object.entries(d.byStatus).map(([k, v]) => (
-            <div key={k} className={`rounded-full px-3 py-1 ${STATUS_COLORS[k] ?? "bg-slate-100 text-slate-700"}`}>
-              <span className="font-medium">{k}</span>
-              <span className="ml-2 tabular-nums">{v}</span>
-            </div>
-          ))}
-        </div>
-      </div>
+      <DashboardCharts monthlyData={monthlyData} topCustomers={topCustomers} statusData={statusData} />
 
       <div className="card">
         <div className="mb-3 flex items-center justify-between">

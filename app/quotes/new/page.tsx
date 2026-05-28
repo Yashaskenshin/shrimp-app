@@ -1,6 +1,14 @@
+import { prisma } from "@/lib/db";
 import { createQuote } from "@/app/actions/quotes";
 
-export default function NewQuotePage() {
+export const dynamic = "force-dynamic";
+
+export default async function NewQuotePage() {
+  const fxAssumption = await prisma.assumption.findUnique({
+    where: { key: "default_fx_rate" },
+  });
+  const defaultFx = fxAssumption?.value ?? 83;
+
   return (
     <div className="mx-auto max-w-xl space-y-4">
       <h1 className="text-2xl font-semibold">New Quote</h1>
@@ -19,11 +27,11 @@ export default function NewQuotePage() {
             name="fxRate"
             type="number"
             step="0.0001"
-            defaultValue={83}
+            defaultValue={defaultFx}
             className="input input-num"
           />
           <p className="mt-1 text-xs text-slate-500">
-            You can change this any time inside the quote.
+            Default from Assumptions. You can change this any time inside the quote.
           </p>
         </div>
         <button type="submit" className="btn-primary w-full">Create Quote</button>
