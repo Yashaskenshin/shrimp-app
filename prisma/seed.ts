@@ -38,12 +38,13 @@ const ASSUMPTIONS = [
   { key: "depreciation_per_kg",      label: "Depreciation",               value: 0.1141,   unit: "Rs/kg", group: "fixed" },
 ];
 
-// Look for the workbook in the project root (one level above shrimp-app).
+// Look for the workbook — checks project root first (committed to repo),
+// then one level above (legacy local dev layout).
 function findWorkbook(): string | null {
   const candidates = [
+    path.resolve(process.cwd(), "Cost sheet format - Shrimps.xlsx"),
     path.resolve(__dirname, "../../Cost sheet format - Shrimps.xlsx"),
     path.resolve(process.cwd(), "../Cost sheet format - Shrimps.xlsx"),
-    path.resolve(process.cwd(), "Cost sheet format - Shrimps.xlsx"),
   ];
   for (const c of candidates) {
     if (fs.existsSync(c)) return c;
@@ -138,7 +139,9 @@ async function main() {
     await prisma.assumption.upsert({
       where: { key: a.key },
       create: a,
-      update: { label: a.label, value: a.value, unit: a.unit, group: a.group },
+      // Never overwrite value — user may have edited it via the UI.
+      // Only sync display metadata so label/unit/group stay current.
+      update: { label: a.label, unit: a.unit, group: a.group },
     });
   }
   console.log(`  ${ASSUMPTIONS.length} assumptions OK`);
