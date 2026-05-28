@@ -2,6 +2,7 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { useToast } from "@/app/components/Toaster";
 import { upsertProduct, activateProduct } from "@/app/actions/products";
 
 interface P {
@@ -21,6 +22,7 @@ export function ProductTable({ products }: { products: P[] }) {
   const [q, setQ] = useState("");
   const [showInactive, setShowInactive] = useState(false);
   const router = useRouter();
+  const toast = useToast();
   const [busy, start] = useTransition();
   const [editing, setEditing] = useState<P | null>(null);
 
@@ -32,6 +34,14 @@ export function ProductTable({ products }: { products: P[] }) {
       return p.code.toLowerCase().includes(needle) || p.name.toLowerCase().includes(needle);
     });
   }, [products, q, showInactive]);
+
+  function handleToggleActive(p: P, checked: boolean) {
+    start(async () => {
+      await activateProduct(p.id, checked);
+      toast.success(checked ? `${p.code} activated` : `${p.code} deactivated`);
+      router.refresh();
+    });
+  }
 
   return (
     <div className="space-y-3">
@@ -47,7 +57,10 @@ export function ProductTable({ products }: { products: P[] }) {
           Show inactive
         </label>
         <div className="flex-1" />
-        <button className="btn-primary" onClick={() => setEditing({ id: "", code: "", name: "", rmAvgSize: null, stdYieldPct: 0.63, sizeBand: null, category: null, packDefault: null, notes: null, active: true })}>
+        <button
+          className="btn-primary"
+          onClick={() => setEditing({ id: "", code: "", name: "", rmAvgSize: null, stdYieldPct: null, sizeBand: null, category: null, packDefault: null, notes: null, active: true })}
+        >
           + New Product
         </button>
       </div>
@@ -77,7 +90,8 @@ export function ProductTable({ products }: { products: P[] }) {
                   <input
                     type="checkbox"
                     checked={p.active}
-                    onChange={(e) => start(async () => { await activateProduct(p.id, e.target.checked); router.refresh(); })}
+                    disabled={busy}
+                    onChange={(e) => handleToggleActive(p, e.target.checked)}
                   />
                 </td>
                 <td>
@@ -88,13 +102,15 @@ export function ProductTable({ products }: { products: P[] }) {
           </tbody>
         </table>
         {filtered.length > 500 && <p className="mt-2 text-xs text-slate-500">Showing first 500 of {filtered.length}.</p>}
+        {filtered.length === 0 && <p className="py-4 text-center text-sm text-slate-500">No products match.</p>}
       </div>
 
       {editing && (
         <ProductDialog
           initial={editing}
           onClose={() => setEditing(null)}
-          onSaved={() => { setEditing(null); router.refresh(); }}
+          onSaved={(msg) => { setEditing(null); toast.success(msg); router.refresh(); }}
+          onError={(msg) => toast.error(msg)}
           busy={busy}
           startSave={start}
         />
@@ -107,16 +123,40 @@ function ProductDialog({
   initial,
   onClose,
   onSaved,
+  onError,
   busy,
   startSave,
 }: {
   initial: P;
   onClose: () => void;
-  onSaved: () => void;
+  onSaved: (msg: string) => void;
+  onError: (msg: string) => void;
   busy: boolean;
-  startSave: (cb: () => void) => void;
+  startSave: (cb: () => Promise<void>) => void;
 }) {
   const [p, setP] = useState<P>(initial);
+
+  function handleSave() {
+    startSave(async () => {
+      try {
+        await upsertProduct({
+          id: p.id || undefined,
+          code: p.code,
+          name: p.name,
+          rmAvgSize: p.rmAvgSize,
+          stdYieldPct: p.stdYieldPct,
+          sizeBand: p.sizeBand,
+          packDefault: p.packDefault,
+          notes: p.notes,
+          active: p.active,
+        });
+        onSaved(initial.id ? `${p.code} updated` : `${p.code} created`);
+      } catch {
+        onError("Save failed — please try again");
+      }
+    });
+  }
+
   return (
     <div className="fixed inset-0 z-30 flex items-center justify-center bg-slate-900/40 p-4">
       <div className="w-full max-w-xl rounded-lg bg-white p-6 shadow-xl">
@@ -140,11 +180,23 @@ function ProductDialog({
           </div>
           <div>
             <label className="label">RM avg pcs/kg</label>
-            <input type="number" className="input input-num" value={p.rmAvgSize ?? 0} onChange={(e) => setP({ ...p, rmAvgSize: Number(e.target.value) || null })} />
+            <input
+              type="number"
+              className="input input-num"
+              value={p.rmAvgSize ?? ""}
+              onChange={(e) => setP({ ...p, rmAvgSize: e.target.value ? Number(e.target.value) : null })}
+            />
           </div>
           <div>
-            <label className="label">Std yield (0–1)</label>
-            <input type="number" step={0.01} className="input input-num" value={p.stdYieldPct ?? 0} onChange={(e) => setP({ ...p, stdYieldPct: Number(e.target.value) || null })} />
+            <label className="label">Std yield % (e.g. 63)</label>
+            <input
+              type="number"
+              step={0.1}
+              className="input input-num"
+              placeholder="Enter 0–100"
+              value={p.stdYieldPct != null ? p.stdYieldPct * 100 : ""}
+              onChange={(e) => setP({ ...p, stdYieldPct: e.target.value ? Number(e.target.value) / 100 : null })}
+            />
           </div>
           <div className="col-span-2">
             <label className="label">Notes</label>
@@ -156,24 +208,9 @@ function ProductDialog({
           <button
             className="btn-primary"
             disabled={busy || !p.code || !p.name}
-            onClick={() =>
-              startSave(async () => {
-                await upsertProduct({
-                  id: p.id || undefined,
-                  code: p.code,
-                  name: p.name,
-                  rmAvgSize: p.rmAvgSize,
-                  stdYieldPct: p.stdYieldPct,
-                  sizeBand: p.sizeBand,
-                  packDefault: p.packDefault,
-                  notes: p.notes,
-                  active: p.active,
-                });
-                onSaved();
-              })
-            }
+            onClick={handleSave}
           >
-            Save
+            {busy ? "Saving…" : "Save"}
           </button>
         </div>
       </div>

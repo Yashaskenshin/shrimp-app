@@ -13,15 +13,16 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 const STATUSES = ["DRAFT", "SUBMITTED", "VERIFIED", "APPROVED", "REJECTED", "SENT"];
+const PAGE_SIZE = 25;
 
 const SORT_FIELDS: Record<string, object> = {
-  poNo:      { poNo: "asc" },
-  poNoDesc:  { poNo: "desc" },
-  customer:  { customer: "asc" },
+  poNo:         { poNo: "asc" },
+  poNoDesc:     { poNo: "desc" },
+  customer:     { customer: "asc" },
   customerDesc: { customer: "desc" },
-  status:    { status: "asc" },
-  statusDesc: { status: "desc" },
-  updatedAt: { updatedAt: "asc" },
+  status:       { status: "asc" },
+  statusDesc:   { status: "desc" },
+  updatedAt:    { updatedAt: "asc" },
   updatedAtDesc: { updatedAt: "desc" },
 };
 
@@ -57,9 +58,10 @@ function SortTh({ col, label, sort, dir, q, status }: {
 export default async function QuotesList({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; status?: string; sort?: string; dir?: string }>;
+  searchParams: Promise<{ q?: string; status?: string; sort?: string; dir?: string; page?: string }>;
 }) {
-  const { q, status, sort, dir } = await searchParams;
+  const { q, status, sort, dir, page: pageParam } = await searchParams;
+  const page = Math.max(1, parseInt(pageParam ?? "1", 10) || 1);
 
   const where = {
     ...(q?.trim()
@@ -76,20 +78,49 @@ export default async function QuotesList({
   const sortKey = sort && dir ? `${sort}${dir === "desc" ? "Desc" : ""}` : "";
   const orderBy = SORT_FIELDS[sortKey] ?? { createdAt: "desc" };
 
-  const quotes = await prisma.quote.findMany({
-    where,
-    orderBy,
-    include: {
-      _count: { select: { lines: true } },
-      lines: { select: { weightKg: true, usdPerKg: true } },
-    },
-  });
+  const [quotes, total] = await Promise.all([
+    prisma.quote.findMany({
+      where,
+      orderBy,
+      skip: (page - 1) * PAGE_SIZE,
+      take: PAGE_SIZE,
+      include: {
+        _count: { select: { lines: true } },
+        lines: { select: { weightKg: true, usdPerKg: true } },
+      },
+    }),
+    prisma.quote.count({ where }),
+  ]);
+
+  const totalPages = Math.ceil(total / PAGE_SIZE);
+
+  function pageHref(p: number) {
+    const params = new URLSearchParams();
+    if (q) params.set("q", q);
+    if (status) params.set("status", status);
+    if (sort) params.set("sort", sort);
+    if (dir) params.set("dir", dir);
+    params.set("page", String(p));
+    return `/quotes?${params.toString()}`;
+  }
+
+  function exportHref() {
+    const params = new URLSearchParams();
+    if (q) params.set("q", q);
+    if (status) params.set("status", status);
+    return `/quotes/export?${params.toString()}`;
+  }
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold">Quotes</h1>
-        <Link href="/quotes/new" className="btn-primary">+ New Quote</Link>
+        <div className="flex gap-2">
+          <Link href={exportHref()} className="btn-secondary text-sm">
+            ↓ Export CSV
+          </Link>
+          <Link href="/quotes/new" className="btn-primary">+ New Quote</Link>
+        </div>
       </div>
 
       {/* Search + status filter */}
@@ -128,6 +159,15 @@ export default async function QuotesList({
       </div>
 
       <div className="card overflow-x-auto">
+        <div className="mb-3 flex items-center justify-between text-xs text-slate-500">
+          <span>
+            {total === 0 ? "No quotes" : `${(page - 1) * PAGE_SIZE + 1}–${Math.min(page * PAGE_SIZE, total)} of ${total} quote${total === 1 ? "" : "s"}`}
+          </span>
+          {totalPages > 1 && (
+            <span>{page} / {totalPages} pages</span>
+          )}
+        </div>
+
         {quotes.length === 0 ? (
           <p className="text-sm text-slate-500">No quotes found.</p>
         ) : (
@@ -174,6 +214,44 @@ export default async function QuotesList({
               })}
             </tbody>
           </table>
+        )}
+
+        {/* Pagination */}
+        {totalPages > 1 && (
+          <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-3">
+            <Link
+              href={pageHref(page - 1)}
+              className={`btn-secondary text-sm ${page <= 1 ? "pointer-events-none opacity-40" : ""}`}
+            >
+              ← Prev
+            </Link>
+            <div className="flex gap-1">
+              {Array.from({ length: Math.min(totalPages, 7) }, (_, i) => {
+                const p = totalPages <= 7
+                  ? i + 1
+                  : page <= 4
+                  ? i + 1
+                  : page >= totalPages - 3
+                  ? totalPages - 6 + i
+                  : page - 3 + i;
+                return (
+                  <Link
+                    key={p}
+                    href={pageHref(p)}
+                    className={`rounded px-2.5 py-1 text-xs font-medium ${p === page ? "bg-slate-800 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}
+                  >
+                    {p}
+                  </Link>
+                );
+              })}
+            </div>
+            <Link
+              href={pageHref(page + 1)}
+              className={`btn-secondary text-sm ${page >= totalPages ? "pointer-events-none opacity-40" : ""}`}
+            >
+              Next →
+            </Link>
+          </div>
         )}
       </div>
     </div>

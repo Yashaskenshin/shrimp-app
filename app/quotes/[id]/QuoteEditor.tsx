@@ -1292,7 +1292,9 @@ function ProductCombobox({
 }) {
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
+  const [cursor, setCursor] = useState(0);
   const wrapperRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
 
   const grouped = useMemo(() => {
     const pool = query.trim()
@@ -1304,12 +1306,11 @@ function ProductCombobox({
     return groupProductsByCategory(pool);
   }, [products, query]);
 
-  const totalCount = useMemo(
-    () => grouped.reduce((s, g) => s + g.items.length, 0),
-    [grouped],
-  );
+  // Flat list for keyboard navigation
+  const flat = useMemo(() => grouped.flatMap((g) => g.items), [grouped]);
+  const totalCount = flat.length;
 
-  const firstMatch = grouped[0]?.items[0];
+  useEffect(() => { setCursor(0); }, [query]);
 
   useEffect(() => {
     if (!open) return;
@@ -1323,6 +1324,28 @@ function ProductCombobox({
     return () => document.removeEventListener("mousedown", handler);
   }, [open]);
 
+  // Scroll cursor item into view
+  useEffect(() => {
+    if (!open || !listRef.current) return;
+    const el = listRef.current.querySelector(`[data-cursor="true"]`);
+    el?.scrollIntoView({ block: "nearest" });
+  }, [cursor, open]);
+
+  function selectAt(idx: number) {
+    const p = flat[idx];
+    if (!p) return;
+    onChange(p.code);
+    setOpen(false);
+    setQuery("");
+  }
+
+  function handleKeyDown(e: React.KeyboardEvent) {
+    if (e.key === "Escape") { setOpen(false); setQuery(""); return; }
+    if (e.key === "ArrowDown") { e.preventDefault(); setCursor((c) => Math.min(c + 1, totalCount - 1)); return; }
+    if (e.key === "ArrowUp") { e.preventDefault(); setCursor((c) => Math.max(c - 1, 0)); return; }
+    if (e.key === "Enter") { e.preventDefault(); selectAt(cursor); return; }
+  }
+
   const selected = products.find((p) => p.code === value);
 
   return (
@@ -1331,17 +1354,10 @@ function ProductCombobox({
         <input
           autoFocus
           className="input"
-          placeholder="Type code or name…"
+          placeholder="Type code or name… (↑↓ to navigate)"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Escape") { setOpen(false); setQuery(""); }
-            if (e.key === "Enter" && firstMatch) {
-              onChange(firstMatch.code);
-              setOpen(false);
-              setQuery("");
-            }
-          }}
+          onKeyDown={handleKeyDown}
         />
       ) : (
         <button
@@ -1360,7 +1376,7 @@ function ProductCombobox({
         </button>
       )}
       {open && (
-        <div className="absolute left-0 z-20 mt-1 max-h-[26rem] w-[28rem] overflow-auto rounded-md border border-slate-200 bg-white text-sm shadow-lg">
+        <div ref={listRef} className="absolute left-0 z-20 mt-1 max-h-[26rem] w-[28rem] overflow-auto rounded-md border border-slate-200 bg-white text-sm shadow-lg">
           <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-100 bg-slate-50 px-3 py-1.5 text-[11px] text-slate-500">
             <span>{totalCount} match{totalCount === 1 ? "" : "es"}</span>
             {value && (
@@ -1376,28 +1392,38 @@ function ProductCombobox({
           {totalCount === 0 && (
             <p className="px-3 py-4 text-center text-slate-400">No matches</p>
           )}
-          {grouped.map((g) => (
-            <div key={g.category}>
-              <div className="sticky top-7 z-[5] bg-emerald-50/95 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-emerald-800">
-                {g.category}
-                <span className="ml-2 font-normal text-emerald-700/70">{g.items.length}</span>
+          {(() => {
+            let flatIdx = 0;
+            return grouped.map((g) => (
+              <div key={g.category}>
+                <div className="sticky top-7 z-[5] bg-emerald-50/95 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-emerald-800">
+                  {g.category}
+                  <span className="ml-2 font-normal text-emerald-700/70">{g.items.length}</span>
+                </div>
+                <ul>
+                  {g.items.map((p) => {
+                    const idx = flatIdx++;
+                    const isCursor = idx === cursor;
+                    const isSelected = p.code === value;
+                    return (
+                      <li key={p.code}>
+                        <button
+                          type="button"
+                          data-cursor={isCursor ? "true" : undefined}
+                          className={`flex w-full items-start gap-2 px-3 py-1.5 text-left ${isCursor ? "bg-emerald-50 outline-none ring-1 ring-inset ring-emerald-400" : isSelected ? "bg-emerald-100" : "hover:bg-emerald-50"}`}
+                          onMouseEnter={() => setCursor(idx)}
+                          onMouseDown={() => { onChange(p.code); setOpen(false); setQuery(""); }}
+                        >
+                          <span className="shrink-0 font-mono text-[11px] text-slate-400">{p.code}</span>
+                          <span className="min-w-0 flex-1 truncate">{p.name}</span>
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
               </div>
-              <ul>
-                {g.items.map((p) => (
-                  <li key={p.code}>
-                    <button
-                      type="button"
-                      className={`flex w-full items-start gap-2 px-3 py-1.5 text-left hover:bg-emerald-50 ${p.code === value ? "bg-emerald-100" : ""}`}
-                      onMouseDown={() => { onChange(p.code); setOpen(false); setQuery(""); }}
-                    >
-                      <span className="shrink-0 font-mono text-[11px] text-slate-400">{p.code}</span>
-                      <span className="min-w-0 flex-1 truncate">{p.name}</span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ))}
+            ));
+          })()}
         </div>
       )}
     </div>

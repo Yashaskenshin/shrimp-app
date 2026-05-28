@@ -118,6 +118,11 @@ export default async function Dashboard() {
     .slice(0, 8)
     .map(([customer, revenueInr]) => ({ customer, revenueInr }));
 
+  const STATUSES = ["DRAFT", "SUBMITTED", "VERIFIED", "APPROVED", "REJECTED", "SENT"];
+  const statusData = STATUSES
+    .map((status) => ({ status, count: d.byStatus[status] ?? 0 }))
+    .filter((s) => s.count > 0);
+
   const stat = (label: string, value: string, sub?: string) => (
     <div className="card flex-1">
       <div className="text-xs font-medium uppercase tracking-wide text-slate-500">{label}</div>
@@ -149,19 +154,7 @@ export default async function Dashboard() {
         )}
       </div>
 
-      <div className="card">
-        <h2 className="mb-3 text-base font-semibold">By status</h2>
-        <div className="flex flex-wrap gap-3 text-sm">
-          {Object.entries(d.byStatus).map(([k, v]) => (
-            <div key={k} className={`rounded-full px-3 py-1 ${STATUS_COLORS[k] ?? "bg-slate-100 text-slate-700"}`}>
-              <span className="font-medium">{k}</span>
-              <span className="ml-2 tabular-nums">{v}</span>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <DashboardCharts monthlyData={monthlyData} topCustomers={topCustomers} />
+      <DashboardCharts monthlyData={monthlyData} topCustomers={topCustomers} statusData={statusData} />
 
       <div className="card">
         <div className="mb-3 flex items-center justify-between">
