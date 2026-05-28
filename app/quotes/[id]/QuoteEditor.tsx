@@ -130,6 +130,8 @@ interface Props {
   customFixedCosts: CustomCostRow[];
   /** From DB / seed — used to auto-fill variable processing Rs/kg (Excel connector). */
   processingRates: ProcessingChargeRow[];
+  /** Active plant names for the Plant dropdown. */
+  plantOptions: string[];
 }
 
 const MAX_LINES = 12;
@@ -682,15 +684,22 @@ export function QuoteEditor(props: Props) {
           />
         </Field>
         <Field label="Plant">
-          <input
+          <select
             className="input"
             value={header.plant ?? ""}
             onChange={(e) => setHeader({ ...header, plant: e.target.value || null })}
-          />
+          >
+            <option value="">— select plant —</option>
+            {/* Show the current value even if it's no longer in the active list */}
+            {header.plant && !props.plantOptions.includes(header.plant) && (
+              <option value={header.plant}>{header.plant} (inactive)</option>
+            )}
+            {props.plantOptions.map((name) => (
+              <option key={name} value={name}>{name}</option>
+            ))}
+          </select>
           <p className="mt-0.5 text-[11px] leading-snug text-slate-500">
-            Same value as the Excel &quot;Processing charge&quot; sheet (e.g.{" "}
-            <span className="font-medium text-slate-600">NELO</span>) — needed for variable
-            processing Rs/kg to auto-fill.
+            Manage the list in <a href="/assumptions" className="text-emerald-700 hover:underline">Assumptions → Processing plants</a>. Required for variable processing Rs/kg auto-fill.
           </p>
         </Field>
         <Field label="Freeze type (processing sheet)">
